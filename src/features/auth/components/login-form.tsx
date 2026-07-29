@@ -24,8 +24,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-// import { authClient } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
+import { auth } from "@/lib/auth";
 
 const loginSchema = z.object({
   email: z.email("Please Enter an Valid Email"),
@@ -46,7 +46,17 @@ export function LoginForm() {
   });
 
   const onSubmit = async (values: LoginFormType) => {
-    console.log(values);
+    await authClient.signIn.email({
+      email:values.email,
+      password:values.password,
+      callbackURL:"/",
+    },{
+      onSuccess:()=>{
+        router.push("/");
+      },onError:(ctx)=>{
+        toast.error(ctx.error.message);
+      },
+    })
   };
   const isPending = form.formState.isSubmitting;
 
