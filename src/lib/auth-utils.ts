@@ -18,9 +18,7 @@ export const requireUnAuth = async () => {
         headers: await headers(),
     });
 
-    if (!session) {
-        redirect("/");//in future wrokflows
+    if (session) {
+        redirect("/");
     }
-
-    return session;
 };
