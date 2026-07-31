@@ -1,4 +1,4 @@
-# n8n
+# M9M
 
 A full-stack web app built with Next.js, tRPC, Prisma, and Better Auth.
 
