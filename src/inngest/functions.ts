@@ -2,8 +2,7 @@ import { inngest } from "./client";
 import prisma from "@/lib/db";
 
 export const helloWorld = inngest.createFunction(
-  { id: "hello-world" },
-  { event: "test/hello.world" },
+  { id: "hello-world", triggers: [{ event: "test/hello.world" }] },
   async ({ event, step }) => {
     // Fetching the video
     await step.sleep("fetching", "5s");
