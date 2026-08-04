@@ -12,14 +12,18 @@
     "dev:all": "mprocs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.40",
+    "@ai-sdk/google": "^4.0.47",
     "@base-ui/react": "^1.2.0",
     "@hookform/resolvers": "^5.2.2",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@prisma/adapter-pg": "^7.4.1",
     "@prisma/client": "^7.4.1",
     "@tanstack/react-query": "^5.101.4",
     "@trpc/client": "^11.18.0",
     "@trpc/server": "^11.18.0",
     "@trpc/tanstack-react-query": "^11.18.0",
+    "ai": "^7.0.70",
     "better-auth": "^1.6.26",
     "class-variance-authority": "^0.7.1",
     "client-only": "^0.0.1",

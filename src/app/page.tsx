@@ -11,6 +11,24 @@ const Page = () => {
   const queryClient = useQueryClient();
   const { data } = useQuery(trpc.getWorkflows.queryOptions());
 
+  const testAi = useMutation(trpc.testAi.mutationOptions({
+    onSuccess: () => {
+      toast.success("AI Job queued");
+    }
+  }));
+
+  const testAnthropic = useMutation(trpc.testAnthropic.mutationOptions({
+    onSuccess: () => {
+      toast.success("Anthropic Job queued");
+    }
+  }));
+
+  const testOpenRouter = useMutation(trpc.testOpenRouter.mutationOptions({
+    onSuccess: () => {
+      toast.success("OpenRouter Job queued");
+    }
+  }));
+
   const create = useMutation(trpc.createWorkflow.mutationOptions({
     onSuccess: () => {
       toast.success("Job queued");
@@ -23,6 +41,15 @@ const Page = () => {
       <div>
         {JSON.stringify(data, null, 2)}
       </div>
+      <Button disabled={testAi.isPending} onClick={() => testAi.mutate()}>
+        Test AI (Google)
+      </Button>
+      <Button disabled={testAnthropic.isPending} onClick={() => testAnthropic.mutate()}>
+        Test AI (Anthropic)
+      </Button>
+      <Button disabled={testOpenRouter.isPending} onClick={() => testOpenRouter.mutate()}>
+        Test AI (OpenRouter)
+      </Button>
       <Button disabled={create.isPending} onClick={() => create.mutate()}>
         Create workflow
       </Button>
