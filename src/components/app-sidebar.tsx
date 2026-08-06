@@ -22,10 +22,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { authClient } from "@/lib/auth-client";
 
 const menuItems = [
   {
-    title: "Workflows",
+    title: "Main",
     items: [
       {
         title: "Workflows",
@@ -56,7 +57,7 @@ export const AppSidebar = () => {
         <SidebarMenuItem>
           <SidebarMenuButton asChild className="gap-x-4 h-10 px-4">
             <Link href="/" prefetch>
-              <Image src="/logo/logo.png" alt="Nodebase" width={30} height={30} />
+              <Image src="/logo/logo.png" alt="M9M" width={30} height={30} />
               <span className="font-semibold text-sm">M9M</span>
             </Link>
           </SidebarMenuButton>
@@ -66,6 +67,7 @@ export const AppSidebar = () => {
         {menuItems.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupContent>
+              <SidebarMenu>
               {group.items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
@@ -85,6 +87,7 @@ export const AppSidebar = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
@@ -109,6 +112,22 @@ export const AppSidebar = () => {
             >
               <CreditCardIcon className="h-4 w-4" />
               <span>Billing Portal</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Sign out"
+              className="gap-x-4 h-10 px-4"
+              onClick={() => authClient.signOut({
+                fetchOptions: {
+                  onSuccess: () => {
+                    router.push("/login");
+                  },
+                },
+              })}
+            >
+              <LogOutIcon className="h-4 w-4" />
+              <span>Sign out</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
