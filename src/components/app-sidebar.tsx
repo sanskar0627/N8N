@@ -98,7 +98,7 @@ export const AppSidebar = () => {
             <SidebarMenuButton
               tooltip="Upgrade to Pro"
               className="gap-x-4 h-10 px-4"
-              onClick={() => {}}
+              onClick={() => authClient.checkout({ slug: "pro" })}
             >
               <StarIcon className="h-4 w-4" />
               <span>Upgrade to Pro</span>
@@ -108,7 +108,7 @@ export const AppSidebar = () => {
             <SidebarMenuButton
               tooltip="Billing Portal"
               className="gap-x-4 h-10 px-4"
-              onClick={() => {}}
+              onClick={() => authClient.portal()}
             >
               <CreditCardIcon className="h-4 w-4" />
               <span>Billing Portal</span>
