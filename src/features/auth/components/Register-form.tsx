@@ -103,7 +103,7 @@ export function RegisterForm() {
                     Continue with Github
                   </Button>
                 </div>
-                <div className=" gird gap-6">
+                <div className="grid gap-6">
                   <FormField
                     control={form.control}
                     name="email"
