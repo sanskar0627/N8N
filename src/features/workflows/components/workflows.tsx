@@ -7,6 +7,7 @@ import {
   EntityHeader,
   EntityPagination,
   EntitySearch,
+  LoadingView,
 } from "@/components/entity-components";
 import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
 import { useRouter } from "next/navigation";
@@ -84,6 +85,10 @@ export const WorkflowsPagination = () => {
       onPageChange={(page) => setParams({ ...params, page })}
     />
   );
+};
+
+export const WorkflowsLoading = () => {
+  return <LoadingView entity="workflows" />
 };
 
 export const WorkflowsContainer = ({
