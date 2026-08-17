@@ -4,6 +4,7 @@ import { HydrateClient } from "@/trpc/server";
 import { ErrorBoundary } from "react-error-boundary";
 import { Suspense } from "react";
 import { Editor, EditorError, EditorLoading } from "@/features/editor/components/editor";
+import { EditorHeader } from "@/features/editor/components/editor-header";
 
 interface PageProps {
   params: Promise<{
@@ -21,7 +22,10 @@ const Page = async ({ params }: PageProps) => {
     <HydrateClient>
       <ErrorBoundary fallback={<EditorError />}>
         <Suspense fallback={<EditorLoading />}>
-          <Editor workflowId={workflowId} />
+          <EditorHeader workflowId={workflowId} />
+          <main className="flex-1">
+            <Editor workflowId={workflowId} />
+          </main>
         </Suspense>
       </ErrorBoundary>
     </HydrateClient>
