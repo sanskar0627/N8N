@@ -13,6 +13,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  useSuspenseWorkflow,
+  useUpdateWorkflowName,
+} from "@/features/workflows/hooks/use-workflows";
 
 export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
   return (
@@ -22,6 +26,17 @@ export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
         Save
       </Button>
     </div>
+  )
+};
+
+export const EditorNameInput = ({ workflowId }: { workflowId: string }) => {
+  const { data: workflow } = useSuspenseWorkflow(workflowId);
+  const updateWorkflow = useUpdateWorkflowName();
+
+  return (
+    <BreadcrumbItem>
+      {workflow.name}
+    </BreadcrumbItem>
   )
 };
 
@@ -37,6 +52,7 @@ export const EditorBreadcrumbs = ({ workflowId }: { workflowId: string }) => {
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />
+        <EditorNameInput workflowId={workflowId} />
       </BreadcrumbList>
     </Breadcrumb>
   )
