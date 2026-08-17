@@ -10,6 +10,12 @@ export const useSuspenseWorkflows = () => {
   return useSuspenseQuery(trpc.workflows.getMany.queryOptions(params));
 };
 
+export const useSuspenseWorkflow = (id: string) => {
+  const trpc = useTRPC();
+
+  return useSuspenseQuery(trpc.workflows.getOne.queryOptions({ id }));
+};
+
 export const useCreateWorkflow = () => {
   const queryClient = useQueryClient();
   const trpc = useTRPC();
