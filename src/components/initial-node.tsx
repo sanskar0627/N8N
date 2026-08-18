@@ -8,9 +8,10 @@ import { WorkflowNode } from "./workflow-node";
 
 export const InitialNode = memo((props: NodeProps) => {
   return (
-    <WorkflowNode>
+    <WorkflowNode showToolbar={false}>
       <PlaceholderNode
         {...props}
+        onClick={() => {}}
       >
         <div className="cursor-pointer flex items-center justify-center">
           <PlusIcon className="size-4" />
