@@ -5,6 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -92,8 +93,7 @@ enum NodeType {
 model Node {
   id         String   @id @default(cuid())
   workflowId String
-  workflow   Workflow @relation(fields: [workflowId], references: [id],
-    onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   name     String
   type     NodeType
@@ -110,15 +110,12 @@ model Node {
 model Connection {
   id         String   @id @default(cuid())
   workflowId String
-  workflow   Workflow @relation(fields: [workflowId], references: [id],
-    onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   fromNodeId String
-  fromNode   Node     @relation("FromNode", fields: [fromNodeId], references: [id],
-    onDelete: Cascade)
+  fromNode   Node     @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
   toNodeId   String
-  toNode     Node     @relation("ToNode", fields: [toNodeId], references: [id],
-    onDelete: Cascade)
+  toNode     Node     @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
 
   fromOutput String @default("main")
   toInput    String @default("main")
