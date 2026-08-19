@@ -5,7 +5,13 @@ import { authClient } from "@/lib/auth-client";
 
 export const LogoutButton = () => {
   return (
-    <Button onClick={() => authClient.signOut()}>
+    <Button onClick={() => authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          window.location.href = "/login";
+        },
+      },
+    })}>
       Logout
     </Button>
   );

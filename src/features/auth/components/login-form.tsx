@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
-import { auth } from "@/lib/auth";
 
 const loginSchema = z.object({
   email: z.email("Please Enter an Valid Email"),
@@ -77,7 +76,9 @@ export function LoginForm() {
                     className="w-full"
                     type="button"
                     disabled={isPending}
+                    onClick={() => authClient.signIn.social({ provider: "google", callbackURL: "/" })}
                   >
+                    <Image src="/logo/google.svg" alt="Google" width={20} height={20} />
                     Continue with Google
                   </Button>
                   <Button
@@ -85,7 +86,9 @@ export function LoginForm() {
                     className="w-full"
                     type="button"
                     disabled={isPending}
+                    onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/" })}
                   >
+                    <Image src="/logo/github.svg" alt="Github" width={20} height={20} />
                     Continue with Github
                   </Button>
                 </div>

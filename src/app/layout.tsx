@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "N8n",
-  description: "n8n Workflow",
+  title: "M9M",
+  description: "M9M Workflow",
 };
 
 export default function RootLayout({

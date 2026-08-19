@@ -87,7 +87,9 @@ export function RegisterForm() {
                     className="w-full"
                     type="button"
                     disabled={isPending}
+                    onClick={() => authClient.signIn.social({ provider: "google", callbackURL: "/" })}
                   >
+                    <Image src="/logo/google.svg" alt="Google" width={20} height={20} />
                     Continue with Google
                   </Button>
                   <Button
@@ -95,7 +97,9 @@ export function RegisterForm() {
                     className="w-full"
                     type="button"
                     disabled={isPending}
+                    onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/" })}
                   >
+                    <Image src="/logo/github.svg" alt="Github" width={20} height={20} />
                     Continue with Github
                   </Button>
                 </div>
