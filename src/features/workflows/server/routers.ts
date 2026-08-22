@@ -5,6 +5,7 @@ import { generateSlug } from "random-word-slugs";
 import { z } from "zod";
 import { NodeType } from "@/generated/prisma";
 import type { Node, Edge } from "@xyflow/react";
+import { sendWorkflowExecution } from "@/inngest/utils";
 
 export const workflowsRouter = createTRPCRouter({
   create: premiumProcedure.mutation(({ ctx }) => {
@@ -108,6 +109,17 @@ export const workflowsRouter = createTRPCRouter({
 
         return workflow;
       });
+    }),
+  execute: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const workflow = await prisma.workflow.findUniqueOrThrow({
+        where: { id: input.id, userId: ctx.auth.user.id },
+      });
+
+      await sendWorkflowExecution({ workflowId: input.id });
+
+      return workflow;
     }),
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
