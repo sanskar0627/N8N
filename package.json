@@ -17,6 +17,7 @@
     "@base-ui/react": "^1.2.0",
     "@hookform/resolvers": "^5.2.2",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@paralleldrive/cuid2": "^3.3.0",
     "@polar-sh/better-auth": "^1.8.4",
     "@polar-sh/sdk": "^0.47.1",
     "@prisma/adapter-pg": "^7.4.1",
