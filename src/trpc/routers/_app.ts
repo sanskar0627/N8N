@@ -10,20 +10,6 @@ export const appRouter = createTRPCRouter({
 
     return { success: true, message: "Job queued" }
   }),
-  testAnthropic: baseProcedure.mutation(async () => {
-    await inngest.send({
-      name: "execute/anthropic",
-    });
-
-    return { success: true, message: "Anthropic job queued" }
-  }),
-  testOpenRouter: baseProcedure.mutation(async () => {
-    await inngest.send({
-      name: "execute/openrouter",
-    });
-
-    return { success: true, message: "OpenRouter job queued" }
-  }),
   getWorkflows: protectedProcedure.query(({ ctx }) => {
     return prisma.workflow.findMany();
   }),

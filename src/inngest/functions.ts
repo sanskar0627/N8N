@@ -12,50 +12,60 @@ const openrouter = createOpenRouter();
 export const execute = inngest.createFunction(
   { id: "execute-ai", triggers: [{ event: "execute/ai" }] },
   async ({ event, step }) => {
-    const { steps } = await step.ai.wrap(
+    await step.sleep("pretend", "5s");
+
+    console.warn("Something is missing");
+    console.error("This is an error i want to track");
+
+    const { steps: geminiSteps } = await step.ai.wrap(
       "gemini-generate-text",
       generateText,
       {
-        model: google("gemini-3.5-flash-lite"),
+        model: google("gemini-3.6-flash"),
         system: "You are a helpful assistant.",
         prompt: "What is 2 + 2?",
+        experimental_telemetry: {
+          isEnabled: true,
+          recordInputs: true,
+          recordOutputs: true,
+        },
       }
     );
 
-    return steps;
-  },
-);
-
-export const executeAnthropic = inngest.createFunction(
-  { id: "execute-anthropic", triggers: [{ event: "execute/anthropic" }] },
-  async ({ event, step }) => {
-    const { steps } = await step.ai.wrap(
-      "anthropic-generate-text",
-      generateText,
-      {
-        model: anthropic("claude-haiku-4-5"),
-        system: "You are a helpful assistant.",
-        prompt: "What is 2 + 2?",
-      }
-    );
-
-    return steps;
-  },
-);
-
-export const executeOpenRouter = inngest.createFunction(
-  { id: "execute-openrouter", triggers: [{ event: "execute/openrouter" }] },
-  async ({ event, step }) => {
-    const { steps } = await step.ai.wrap(
+    const { steps: openrouterSteps } = await step.ai.wrap(
       "openrouter-generate-text",
       generateText,
       {
-        model: openrouter("google/gemma-4-26b-a4b-it:free"),
+        model: openrouter("nvidia/nemotron-3.5-lightning:free"),
         system: "You are a helpful assistant.",
         prompt: "What is 2 + 2?",
+        experimental_telemetry: {
+          isEnabled: true,
+          recordInputs: true,
+          recordOutputs: true,
+        },
       }
     );
 
-    return steps;
+    const { steps: anthropicSteps } = await step.ai.wrap(
+      "anthropic-generate-text",
+      generateText,
+      {
+        model: anthropic("claude-sonnet-4-5"),
+        system: "You are a helpful assistant.",
+        prompt: "What is 2 + 2?",
+        experimental_telemetry: {
+          isEnabled: true,
+          recordInputs: true,
+          recordOutputs: true,
+        },
+      }
+    );
+
+    return {
+      geminiSteps,
+      openrouterSteps,
+      anthropicSteps,
+    };
   },
 );
