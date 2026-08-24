@@ -81,6 +81,7 @@ model Workflow {
 
   nodes      Node[]
   connection Connection[]
+  executions Execution[]
 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -97,6 +98,12 @@ enum NodeType {
   SLACK
   GOOGLE_FORM_TRIGGER
   STRIPE_TRIGGER
+}
+
+enum ExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
 }
 
 model Node {
@@ -133,4 +140,19 @@ model Connection {
   updatedAt DateTime @updatedAt
 
   @@unique([fromNodeId, toNodeId, fromOutput, toInput])
+}
+
+model Execution {
+  id             String          @id @default(cuid())
+  startedAt      DateTime        @default(now())
+  completedAt    DateTime?
+  status         ExecutionStatus @default(RUNNING)
+  error          String?
+  errorStack     String?
+  inngestEventId String          @unique
+  output         Json?
+  workflowId     String
+  workflow       Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, startedAt(sort: Desc)])
 }
