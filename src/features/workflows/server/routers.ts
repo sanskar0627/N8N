@@ -1,3 +1,5 @@
+import { TRPCError } from "@trpc/server";
+import { executeNodeForTest } from "@/features/executions/lib/test-executor";
 import { PAGINATION } from "@/config/constants";
 import prisma from "@/lib/db";
 import { createTRPCRouter, premiumProcedure, protectedProcedure } from "@/trpc/init";
@@ -206,6 +208,43 @@ export const workflowsRouter = createTRPCRouter({
         totalPages,
         hasNextPage,
         hasPreviousPage,
+      };
+    }),
+  executeNode: premiumProcedure
+    .input(z.object({
+      workflowId: z.string(),
+      nodeId: z.string(),
+      mockContext: z.record(z.string(), z.any()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await executeNodeForTest({
+        workflowId: input.workflowId,
+        nodeId: input.nodeId,
+        userId: ctx.auth.user.id,
+        mockContext: input.mockContext,
+      });
+
+      if (!result.success) {
+        let code: "NOT_FOUND" | "FORBIDDEN" | "BAD_REQUEST" | "INTERNAL_SERVER_ERROR" = "INTERNAL_SERVER_ERROR";
+
+        if (result.error === "Node not found") {
+          code = "NOT_FOUND";
+        } else if (result.error === "Unauthorized") {
+          code = "FORBIDDEN";
+        } else if (result.error === "Trigger nodes cannot be tested individually") {
+          code = "BAD_REQUEST";
+        }
+
+        throw new TRPCError({
+          code,
+          message: result.error || "Node execution failed",
+        });
+      }
+
+      return {
+        success: true,
+        nodeId: input.nodeId,
+        output: result.output,
       };
     }),
 });
