@@ -1,5 +1,11 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { PlusIcon, XIcon } from "lucide-react";
+import { useEffect } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
+import z from "zod";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +23,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -24,13 +31,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import z from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form";
-import { useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { PlusIcon, XIcon } from "lucide-react";
+import { variableNameSchema } from "@/features/executions/lib/variable-name";
 
 const headerSchema = z.object({
   key: z.string().min(1, "Header name is required"),
@@ -38,13 +39,7 @@ const headerSchema = z.object({
 });
 
 const formSchema = z.object({
-  variableName: z
-    .string()
-    .min(1, "Variable name is required")
-    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
-      message:
-        "Variable name must start with a letter or underscore and can only contain letters, numbers, and underscores",
-    }),
+  variableName: variableNameSchema,
   endpoint: z.string().min(1, { message: "Please enter a valid URL" }),
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   body: z.string().optional(),
@@ -113,7 +108,7 @@ export const HttpRequestDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>HTTP Request</DialogTitle>
           <DialogDescription>
@@ -123,7 +118,7 @@ export const HttpRequestDialog = ({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="mt-4 space-y-8"
+            className="mt-4 space-y-6 sm:space-y-8"
           >
             <FormField
               control={form.control}
@@ -137,7 +132,9 @@ export const HttpRequestDialog = ({
                   <FormDescription>
                     Name of the variable to store the response in. It can be
                     used later to reference in other nodes:{" "}
-                    {`{{${watchVariableName}.httpResponse.data}}`}
+                    <code className="break-all">
+                      {`{{${watchVariableName}.httpResponse.data}}`}
+                    </code>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -149,10 +146,7 @@ export const HttpRequestDialog = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Method</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <span
@@ -204,7 +198,10 @@ export const HttpRequestDialog = ({
                 </p>
               )}
               {fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
+                <div
+                  key={field.id}
+                  className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start"
+                >
                   <FormField
                     control={form.control}
                     name={`headers.${index}.key`}
@@ -242,7 +239,7 @@ export const HttpRequestDialog = ({
                     variant="ghost"
                     size="icon"
                     onClick={() => remove(index)}
-                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                    className="h-9 w-full shrink-0 text-muted-foreground hover:text-destructive sm:w-9"
                   >
                     <XIcon className="h-4 w-4" />
                   </Button>
@@ -260,7 +257,7 @@ export const HttpRequestDialog = ({
                   <FormLabel>Endpoint URL</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="https://api.example.com/users/{{httpResponse.data.id}}"
+                      placeholder="https://api.example.com/users/{{previousRequest.httpResponse.data.id}}"
                       {...field}
                     />
                   </FormControl>
@@ -282,7 +279,7 @@ export const HttpRequestDialog = ({
                     <FormControl>
                       <Textarea
                         placeholder={
-                          '{\n    "userId": "{{httpResponse.data.id}}",\n    "name": "{{httpResponse.data.name}}"\n}'
+                          '{\n    "userId": "{{previousRequest.httpResponse.data.id}}",\n    "name": "{{previousRequest.httpResponse.data.name}}"\n}'
                         }
                         {...field}
                         className="min-h-[120px] font-mono text-sm"

@@ -1,13 +1,13 @@
 "use client";
 
-import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
+import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { GlobeIcon } from "lucide-react";
 import { memo, useState } from "react";
-import { BaseExecutionNode } from "../base-execution-node";
-import { type HttpRequestFormValues, HttpRequestDialog } from "./dialog";
-import { fetchHttpRequestRealtimeToken } from "./actions";
-import { useNodeStatus } from "../../hooks/use-node-status";
 import { httpRequestChannelName } from "@/inngest/channels/http-request";
+import { useNodeStatus } from "../../hooks/use-node-status";
+import { BaseExecutionNode } from "../base-execution-node";
+import { fetchHttpRequestRealtimeToken } from "./actions";
+import { HttpRequestDialog, type HttpRequestFormValues } from "./dialog";
 
 type HttpRequestNodeData = {
   variableName?: string;
@@ -19,63 +19,64 @@ type HttpRequestNodeData = {
 
 type HttpRequestNodeType = Node<HttpRequestNodeData>;
 
-export const HttpRequestNode = memo(
-  (props: NodeProps<HttpRequestNodeType>) => {
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const { setNodes } = useReactFlow();
+export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { setNodes } = useReactFlow();
 
-    const nodeStatus = useNodeStatus({
-      nodeId: props.id,
-      channel: httpRequestChannelName,
-      topic: "status",
-      refreshToken: fetchHttpRequestRealtimeToken,
-    });
+  const nodeStatus = useNodeStatus({
+    nodeId: props.id,
+    channel: httpRequestChannelName,
+    topic: "status",
+    refreshToken: fetchHttpRequestRealtimeToken,
+  });
 
-    const handleOpenSettings = () => setDialogOpen(true);
+  const handleOpenSettings = () => setDialogOpen(true);
 
-    const handleSubmit = (values: HttpRequestFormValues) => {
-      setNodes((nodes) =>
-        nodes.map((node) => {
-          if (node.id === props.id) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                ...values,
-              },
-            };
-          }
-          return node;
-        }),
-      );
-    };
-
-    const nodeData = props.data;
-    const description = nodeData?.endpoint
-      ? `${nodeData.method || "GET"}: ${nodeData.endpoint}`
-      : "Not configured";
-
-    return (
-      <>
-        <HttpRequestDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onSubmit={handleSubmit}
-          defaultValues={nodeData}
-        />
-        <BaseExecutionNode
-          {...props}
-          icon={GlobeIcon}
-          name="HTTP Request"
-          description={description}
-          onSettings={handleOpenSettings}
-          onDoubleClick={handleOpenSettings}
-          status={nodeStatus}
-          nodeData={nodeData as Record<string, unknown>}
-        />
-      </>
+  const handleSubmit = (values: HttpRequestFormValues) => {
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.id === props.id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...values,
+            },
+          };
+        }
+        return node;
+      }),
     );
-  },
-);
+  };
+
+  const nodeData = props.data;
+  const requestDescription = nodeData?.endpoint
+    ? `${nodeData.method || "GET"}: ${nodeData.endpoint}`
+    : "Not configured";
+  const description = nodeData?.variableName
+    ? `${requestDescription} → ${nodeData.variableName}`
+    : requestDescription;
+
+  return (
+    <>
+      <HttpRequestDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleSubmit}
+        defaultValues={nodeData}
+      />
+      <BaseExecutionNode
+        {...props}
+        icon={GlobeIcon}
+        name="HTTP Request"
+        description={description}
+        onSettings={handleOpenSettings}
+        onDoubleClick={handleOpenSettings}
+        status={nodeStatus}
+        nodeData={nodeData as Record<string, unknown>}
+      />
+    </>
+  );
+});
 
 HttpRequestNode.displayName = "HttpRequestNode";
