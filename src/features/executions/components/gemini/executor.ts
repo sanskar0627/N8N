@@ -1,13 +1,9 @@
-import type { NodeExecutor } from "@/features/executions/types";
-import { NonRetriableError } from "inngest";
-import { generateText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import Handlebars from "handlebars";
+import { generateText } from "ai";
+import { NonRetriableError } from "inngest";
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
 import { geminiChannel } from "@/inngest/channels/gemini";
-
-Handlebars.registerHelper("json", (context) => {
-  return new Handlebars.SafeString(JSON.stringify(context));
-});
 
 type GeminiData = {
   variableName?: string;
@@ -41,23 +37,18 @@ export const geminiExecutor: NodeExecutor<GeminiData> = async ({
     throw new NonRetriableError("Gemini Node: User prompt is required");
   }
 
-  const systemPrompt = data.systemPrompt
-    ? Handlebars.compile(data.systemPrompt)(context)
-    : "You are a helpful assistant.";
-  const userPrompt = Handlebars.compile(data.userPrompt)(context);
-
-  const google = createGoogleGenerativeAI({ apiKey: data.apiKey });
-
   try {
-    const { steps } = await step.ai.wrap(
-      "gemini-generate-text",
-      generateText,
-      {
-        model: google(data.model || "gemini-2.0-flash"),
-        system: systemPrompt,
-        prompt: userPrompt,
-      },
-    );
+    const systemPrompt = data.systemPrompt
+      ? resolveTemplate(data.systemPrompt, context, "system prompt")
+      : "You are a helpful assistant.";
+    const userPrompt = resolveTemplate(data.userPrompt, context, "user prompt");
+    const google = createGoogleGenerativeAI({ apiKey: data.apiKey });
+
+    const { steps } = await step.ai.wrap("gemini-generate-text", generateText, {
+      model: google(data.model || "gemini-2.0-flash"),
+      system: systemPrompt,
+      prompt: userPrompt,
+    });
 
     const text =
       steps[0]?.content[0]?.type === "text" ? steps[0].content[0].text : "";
@@ -70,6 +61,9 @@ export const geminiExecutor: NodeExecutor<GeminiData> = async ({
     };
   } catch (error) {
     await publish(geminiChannel().status({ nodeId, status: "error" }));
+    if (error instanceof NonRetriableError) {
+      throw error;
+    }
     throw new NonRetriableError("Gemini Node: execution failed", {
       cause: error,
     });

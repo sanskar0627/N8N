@@ -1,12 +1,8 @@
-import type { NodeExecutor } from "@/features/executions/types";
 import { NonRetriableError } from "inngest";
-import Handlebars from "handlebars";
-import { discordChannel } from "@/inngest/channels/discord";
 import ky from "ky";
-
-Handlebars.registerHelper("json", (context) => {
-  return new Handlebars.SafeString(JSON.stringify(context));
-});
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
+import { discordChannel } from "@/inngest/channels/discord";
 
 type DiscordData = {
   variableName?: string;
@@ -29,12 +25,12 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
     throw new NonRetriableError("Discord Node: Content is required");
   }
 
-  const content = Handlebars.compile(data.content)(context);
-  const username = data.username
-    ? Handlebars.compile(data.username)(context)
-    : "M9M";
-
   try {
+    const content = resolveTemplate(data.content, context, "message content");
+    const username = data.username
+      ? resolveTemplate(data.username, context, "username")
+      : "M9M";
+
     const result = await step.run("discord-webhook", async () => {
       if (!data.webhookUrl) {
         throw new NonRetriableError("Discord Node: Webhook URL is required");
@@ -64,6 +60,9 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
     return result;
   } catch (error) {
     await publish(discordChannel().status({ nodeId, status: "error" }));
+    if (error instanceof NonRetriableError) {
+      throw error;
+    }
     throw new NonRetriableError("Discord Node: execution failed", {
       cause: error,
     });

@@ -1,12 +1,8 @@
-import type { NodeExecutor } from "@/features/executions/types";
 import { NonRetriableError } from "inngest";
-import Handlebars from "handlebars";
-import { slackChannel } from "@/inngest/channels/slack";
 import ky from "ky";
-
-Handlebars.registerHelper("json", (context) => {
-  return new Handlebars.SafeString(JSON.stringify(context));
-});
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
+import { slackChannel } from "@/inngest/channels/slack";
 
 type SlackData = {
   variableName?: string;
@@ -28,9 +24,9 @@ export const slackExecutor: NodeExecutor<SlackData> = async ({
     throw new NonRetriableError("Slack Node: Content is required");
   }
 
-  const content = Handlebars.compile(data.content)(context);
-
   try {
+    const content = resolveTemplate(data.content, context, "message content");
+
     const result = await step.run("slack-webhook", async () => {
       if (!data.webhookUrl) {
         throw new NonRetriableError("Slack Node: Webhook URL is required");
@@ -57,6 +53,9 @@ export const slackExecutor: NodeExecutor<SlackData> = async ({
     return result;
   } catch (error) {
     await publish(slackChannel().status({ nodeId, status: "error" }));
+    if (error instanceof NonRetriableError) {
+      throw error;
+    }
     throw new NonRetriableError("Slack Node: execution failed", {
       cause: error,
     });
