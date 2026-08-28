@@ -1,6 +1,15 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  CopyIcon,
+  Loader2Icon,
+  PlayIcon,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,19 +18,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useExecuteNode } from "../hooks/use-execute-node";
-import {
-  PlayIcon,
-  Loader2Icon,
-  AlertCircleIcon,
-  CheckCircleIcon,
-  CopyIcon,
-  CheckIcon,
-} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  buildContextFromVariables,
+  extractTemplateVariables,
+} from "@/features/executions/lib/template-variables";
+import { useExecuteNode } from "../hooks/use-execute-node";
 
 interface TestNodeDialogProps {
   open: boolean;
@@ -32,54 +36,7 @@ interface TestNodeDialogProps {
   nodeName: string;
 }
 
-function extractVariables(data: Record<string, unknown>): string[] {
-  const variables = new Set<string>();
-  const regex = /\{\{([^}]+)\}\}/g;
-
-  function searchValue(value: unknown) {
-    if (typeof value === "string") {
-      regex.lastIndex = 0;
-      let match;
-      while ((match = regex.exec(value)) !== null) {
-        let varName = match[1].trim();
-        if (varName.startsWith("json ")) {
-          varName = varName.substring(5);
-        }
-        variables.add(varName);
-      }
-    } else if (typeof value === "object" && value !== null) {
-      Object.values(value).forEach(searchValue);
-    }
-  }
-
-  searchValue(data);
-  return Array.from(variables);
-}
-
-function buildContextFromVariables(
-  variables: string[],
-  values: Record<string, string>,
-): Record<string, unknown> {
-  const context: Record<string, unknown> = {};
-
-  for (const varPath of variables) {
-    const value = values[varPath] || "";
-    const parts = varPath.split(".");
-
-    let current: Record<string, unknown> = context;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!current[parts[i]] || typeof current[parts[i]] !== "object") {
-        current[parts[i]] = {};
-      }
-      current = current[parts[i]] as Record<string, unknown>;
-    }
-    current[parts[parts.length - 1]] = value;
-  }
-
-  return context;
-}
-
-function formatOutput(output: unknown, maxLength: number = 500): string {
+function formatOutput(output: unknown): string {
   if (output === undefined || output === null) return "No output";
 
   let str: string;
@@ -93,7 +50,6 @@ function formatOutput(output: unknown, maxLength: number = 500): string {
     }
   }
 
-  if (str.length > maxLength) return str.substring(0, maxLength) + "...";
   return str;
 }
 
@@ -106,9 +62,9 @@ export const TestNodeDialog = ({
   nodeName,
 }: TestNodeDialogProps) => {
   const executeNode = useExecuteNode();
-  const [variableValues, setVariableValues] = useState<
-    Record<string, string>
-  >({});
+  const [variableValues, setVariableValues] = useState<Record<string, string>>(
+    {},
+  );
   const [copied, setCopied] = useState(false);
 
   const [executionResult, setExecutionResult] = useState<{
@@ -117,7 +73,10 @@ export const TestNodeDialog = ({
     error?: string;
   }>({ status: "idle" });
 
-  const variables = useMemo(() => extractVariables(nodeData), [nodeData]);
+  const variables = useMemo(
+    () => extractTemplateVariables(nodeData),
+    [nodeData],
+  );
 
   useEffect(() => {
     if (open) {
@@ -132,7 +91,7 @@ export const TestNodeDialog = ({
   }, [open, variables]);
 
   const handleRunTest = () => {
-    const mockContext = buildContextFromVariables(variables, variableValues);
+    const mockContext = buildContextFromVariables(variableValues);
     setExecutionResult({ status: "running" });
     setCopied(false);
 
@@ -176,7 +135,7 @@ export const TestNodeDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PlayIcon className="size-4" />
@@ -184,7 +143,7 @@ export const TestNodeDialog = ({
           </DialogTitle>
           <DialogDescription>
             {variables.length > 0
-              ? "Enter sample values for the template variables used in this node."
+              ? "Enter sample text or JSON values for the template variables used in this node."
               : "This node has no template variables. Click Run to test with empty context."}
           </DialogDescription>
         </DialogHeader>
@@ -199,7 +158,7 @@ export const TestNodeDialog = ({
                   </Label>
                   <Input
                     id={varName}
-                    placeholder={`Enter value for ${varName}`}
+                    placeholder={`Enter text or JSON for ${varName}`}
                     value={variableValues[varName] || ""}
                     onChange={(e) =>
                       handleVariableChange(varName, e.target.value)
@@ -279,13 +238,7 @@ export const TestNodeDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button
-            onClick={handleRunTest}
-            disabled={
-              isRunning ||
-              variables.some((v) => !variableValues[v]?.trim())
-            }
-          >
+          <Button onClick={handleRunTest} disabled={isRunning}>
             {isRunning ? (
               <>
                 <Loader2Icon className="mr-2 size-4 animate-spin" />
