@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
+    "test": "tsx --test tests/**/*.test.ts",
     "inngest:dev": "npx inngest-cli@latest dev",
     "dev:all": "mprocs"
   },
