@@ -1,23 +1,28 @@
 "use client";
 
-import { memo, useState } from "react";
-import { type NodeProps } from "@xyflow/react";
+import type { NodeProps } from "@xyflow/react";
 import { MousePointerIcon } from "lucide-react";
-
-import { BaseTriggerNode } from "../base-trigger-node";
-import { ManualTriggerDialog } from "./dialog";
-import { manualTriggerChannelName } from "@/inngest/channels/manual-trigger";
-import { fetchManualTriggerRealtimeToken } from "./actions";
+import { useParams } from "next/navigation";
+import { memo, useCallback, useState } from "react";
 import { useNodeStatus } from "@/features/executions/hooks/use-node-status";
+import { manualTriggerChannelName } from "@/inngest/channels/manual-trigger";
+import { BaseTriggerNode } from "../base-trigger-node";
+import { fetchManualTriggerRealtimeToken } from "./actions";
+import { ManualTriggerDialog } from "./dialog";
 
 export const ManualTriggerNode = memo((props: NodeProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { workflowId } = useParams<{ workflowId: string }>();
+  const refreshToken = useCallback(
+    () => fetchManualTriggerRealtimeToken(workflowId),
+    [workflowId],
+  );
 
   const nodeStatus = useNodeStatus({
     nodeId: props.id,
-    channel: manualTriggerChannelName,
+    channel: manualTriggerChannelName(workflowId),
     topic: "status",
-    refreshToken: fetchManualTriggerRealtimeToken,
+    refreshToken,
   });
 
   const handleOpenSettings = () => setDialogOpen(true);

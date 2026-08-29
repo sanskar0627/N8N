@@ -1,6 +1,7 @@
 import { channel, topic } from "@inngest/realtime";
 
-export const httpRequestChannelName = "http-request-execution";
+export const httpRequestChannelName = (workflowId: string) =>
+  `workflow:${workflowId}:http-request-execution`;
 
 export const httpRequestChannel = channel(httpRequestChannelName).addTopic(
   topic("status").type<{
