@@ -4,6 +4,7 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { WORKFLOW_EXECUTION_STARTED_EVENT } from "@/features/executions/lib/realtime-status";
 import { useTRPC } from "@/trpc/client";
 import { useWorkflowsParams } from "./use-workflows-params";
 
@@ -99,6 +100,9 @@ export const useExecuteWorkflow = () => {
 
   return useMutation(
     trpc.workflows.execute.mutationOptions({
+      onMutate: () => {
+        window.dispatchEvent(new Event(WORKFLOW_EXECUTION_STARTED_EVENT));
+      },
       onSuccess: (data) => {
         toast.success(`Workflow "${data.name}" executed`);
       },
