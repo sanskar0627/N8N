@@ -8,13 +8,13 @@ export type StepTools = GetStepTools<Inngest.Any>;
 export interface NodeExecutionParams<TData = Record<string, unknown>> {
   data: TData;
   nodeId: string;
+  workflowId: string;
   userId: string;
   context: WorkflowContext;
   step: StepTools;
   publish: Realtime.PublishFn;
 }
 
-export type NodeExecutor<
-  TData = Record<string, unknown>,
-  TContext = WorkflowContext,
-> = (params: NodeExecutionParams<TData>) => Promise<WorkflowContext>;
+export type NodeExecutor<TData = Record<string, unknown>> = (
+  params: NodeExecutionParams<TData>,
+) => Promise<WorkflowContext>;
