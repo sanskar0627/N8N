@@ -1,11 +1,11 @@
-import { Connection, Node } from "@/generated/prisma";
-import toposort from "toposort";
-import { inngest } from "./client";
 import { createId } from "@paralleldrive/cuid2";
+import toposort from "toposort";
+import type { Connection, Node } from "@/generated/prisma/client";
+import { inngest } from "./client";
 
 export const topologicalSort = (
   nodes: Node[],
-  connections: Connection[]
+  connections: Connection[],
 ): Node[] => {
   if (connections.length === 0) return nodes;
 
@@ -39,16 +39,23 @@ export const topologicalSort = (
   }
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  return sortedNodeIds.map((id) => nodeMap.get(id)!).filter(Boolean);
+  return sortedNodeIds.flatMap((id) => {
+    const node = nodeMap.get(id);
+    return node ? [node] : [];
+  });
 };
 
-export const sendWorkflowExecution = async (data: {
+export const sendWorkflowExecution = async ({
+  eventId,
+  ...data
+}: {
   workflowId: string;
+  eventId?: string;
   [key: string]: unknown;
 }) => {
   return inngest.send({
     name: "workflows/execute.workflow",
     data,
-    id: createId(),
+    id: eventId ?? createId(),
   });
 };
