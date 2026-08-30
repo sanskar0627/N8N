@@ -1,6 +1,6 @@
 import { NonRetriableError } from "inngest";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
-import { ExecutionStatus, type NodeType } from "@/generated/prisma";
+import { ExecutionStatus, type NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
 import { inngest } from "./client";
 import { topologicalSort } from "./utils";

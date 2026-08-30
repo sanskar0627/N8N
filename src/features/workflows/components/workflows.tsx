@@ -1,25 +1,29 @@
 "use client";
 
-import React from "react";
-import { useCreateWorkflow, useRemoveWorkflow, useSuspenseWorkflows } from "../hooks/use-workflows";
+import { formatDistanceToNow } from "date-fns";
+import { WorkflowIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import type React from "react";
 import {
   EmptyView,
   EntityContainer,
+  EntityHeader,
   EntityItem,
   EntityList,
-  EntityHeader,
   EntityPagination,
   EntitySearch,
   ErrorView,
   LoadingView,
 } from "@/components/entity-components";
-import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
-import { useRouter } from "next/navigation";
-import { useWorkflowsParams } from "../hooks/use-workflows-params";
+import type { Workflow } from "@/generated/prisma/client";
 import { useEntitySearch } from "@/hooks/use-entity-search";
-import type { Workflow } from "@/generated/prisma";
-import { WorkflowIcon } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
+import {
+  useCreateWorkflow,
+  useRemoveWorkflow,
+  useSuspenseWorkflows,
+} from "../hooks/use-workflows";
+import { useWorkflowsParams } from "../hooks/use-workflows-params";
 
 export const WorkflowsSearch = () => {
   const [params, setParams] = useWorkflowsParams();
@@ -64,7 +68,7 @@ export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
         handleError(error);
       },
     });
-  }
+  };
 
   return (
     <>
@@ -127,15 +131,10 @@ export const WorkflowsEmpty = () => {
         message="You haven't created any workflows yet. Get started by creating your first workflow"
       />
     </>
-  )
+  );
 };
 
-
-export const WorkflowItem = ({
-  data,
-}: {
-  data: Workflow
-}) => {
+export const WorkflowItem = ({ data }: { data: Workflow }) => {
   const removeWorkflow = useRemoveWorkflow();
 
   const handleRemove = () => {
@@ -161,11 +160,11 @@ export const WorkflowItem = ({
       onRemove={handleRemove}
       isRemoving={removeWorkflow.isPending}
     />
-  )
-}
+  );
+};
 
 export const WorkflowsContainer = ({
-  children
+  children,
 }: {
   children: React.ReactNode;
 }) => {
