@@ -4,6 +4,10 @@ import type { Edge, Node } from "@xyflow/react";
 import { generateSlug } from "random-word-slugs";
 import { z } from "zod";
 import { PAGINATION } from "@/config/constants";
+import {
+  AI_NODE_TYPES,
+  isAiNodeType,
+} from "@/features/executions/components/ai-node/config";
 import { executeNodeForTest } from "@/features/executions/lib/test-executor";
 import {
   findDuplicateVariableNames,
@@ -109,17 +113,21 @@ export const workflowsRouter = createTRPCRouter({
 
       // Transaction to ensure consistency
       return await prisma.$transaction(async (tx) => {
-        const existingTriggerNodes = await tx.node.findMany({
+        const existingPrivateNodes = await tx.node.findMany({
           where: {
             workflowId: id,
             type: {
-              in: [NodeType.GOOGLE_FORM_TRIGGER, NodeType.STRIPE_TRIGGER],
+              in: [
+                NodeType.GOOGLE_FORM_TRIGGER,
+                NodeType.STRIPE_TRIGGER,
+                ...AI_NODE_TYPES,
+              ],
             },
           },
           select: { id: true, data: true },
         });
         const googleFormSecrets = new Map(
-          existingTriggerNodes.flatMap(
+          existingPrivateNodes.flatMap(
             (node: { id: string; data: unknown }) => {
               const data =
                 node.data &&
@@ -134,7 +142,7 @@ export const workflowsRouter = createTRPCRouter({
           ),
         );
         const stripeWebhookSecrets = new Map(
-          existingTriggerNodes.flatMap(
+          existingPrivateNodes.flatMap(
             (node: { id: string; data: unknown }) => {
               const data =
                 node.data &&
@@ -144,6 +152,21 @@ export const workflowsRouter = createTRPCRouter({
                   : {};
               return typeof data.webhookSecret === "string"
                 ? [[node.id, data.webhookSecret] as const]
+                : [];
+            },
+          ),
+        );
+        const aiApiKeys = new Map(
+          existingPrivateNodes.flatMap(
+            (node: { id: string; data: unknown }) => {
+              const data =
+                node.data &&
+                typeof node.data === "object" &&
+                !Array.isArray(node.data)
+                  ? (node.data as Record<string, unknown>)
+                  : {};
+              return typeof data.apiKey === "string"
+                ? [[node.id, data.apiKey] as const]
                 : [];
             },
           ),
@@ -172,6 +195,14 @@ export const workflowsRouter = createTRPCRouter({
               const existingSecret = stripeWebhookSecrets.get(node.id);
               if (existingSecret) {
                 data.webhookSecret = existingSecret;
+              }
+            }
+
+            if (typeof node.type === "string" && isAiNodeType(node.type)) {
+              delete data.apiKey;
+              const existingApiKey = aiApiKeys.get(node.id);
+              if (existingApiKey) {
+                data.apiKey = existingApiKey;
               }
             }
 
@@ -370,6 +401,77 @@ export const workflowsRouter = createTRPCRouter({
         allowedEventTypes: input.allowedEventTypes,
       };
     }),
+  getAiNodeSecretStatus: protectedProcedure
+    .input(
+      z.object({
+        workflowId: z.string(),
+        nodeId: z.string(),
+        nodeType: z.enum(AI_NODE_TYPES),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const node = await prisma.node.findFirst({
+        where: {
+          id: input.nodeId,
+          workflowId: input.workflowId,
+          type: input.nodeType,
+          workflow: { userId: ctx.auth.user.id },
+        },
+        select: { data: true },
+      });
+
+      if (!node) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Save the AI node before configuring its API key",
+        });
+      }
+
+      const data =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+
+      return { configured: typeof data.apiKey === "string" };
+    }),
+  saveAiNodeApiKey: protectedProcedure
+    .input(
+      z.object({
+        workflowId: z.string(),
+        nodeId: z.string(),
+        nodeType: z.enum(AI_NODE_TYPES),
+        apiKey: z.string().trim().min(8).max(2_000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const node = await prisma.node.findFirst({
+        where: {
+          id: input.nodeId,
+          workflowId: input.workflowId,
+          type: input.nodeType,
+          workflow: { userId: ctx.auth.user.id },
+        },
+      });
+
+      if (!node) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Save the AI node before configuring its API key",
+        });
+      }
+
+      const data =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+
+      await prisma.node.update({
+        where: { id: node.id },
+        data: { data: { ...data, apiKey: input.apiKey } },
+      });
+
+      return { configured: true };
+    }),
   execute: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -410,6 +512,10 @@ export const workflowsRouter = createTRPCRouter({
 
           if (node.type === NodeType.STRIPE_TRIGGER) {
             delete data.webhookSecret;
+          }
+
+          if (isAiNodeType(node.type)) {
+            delete data.apiKey;
           }
 
           return {
