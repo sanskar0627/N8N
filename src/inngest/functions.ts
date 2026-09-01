@@ -2,6 +2,7 @@ import { NonRetriableError } from "inngest";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import { ExecutionStatus, type NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
+import { workflowNodeStatusChannel } from "./channels/workflow-node-status";
 import { inngest } from "./client";
 import { topologicalSort } from "./utils";
 
@@ -64,6 +65,12 @@ export const executeWorkflow = inngest.createFunction(
 
     for (const node of sortedNodes) {
       const executor = getExecutor(node.type as NodeType);
+      await publish(
+        workflowNodeStatusChannel(workflowId).status({
+          nodeId: node.id,
+          status: "loading",
+        }),
+      );
 
       const executePromise = executor({
         data: node.data as Record<string, unknown>,
@@ -75,13 +82,34 @@ export const executeWorkflow = inngest.createFunction(
         publish,
       });
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
           reject(new Error("Timeout: Execution took longer than 60 seconds"));
         }, 60000);
       });
 
-      context = await Promise.race([executePromise, timeoutPromise]);
+      try {
+        context = await Promise.race([executePromise, timeoutPromise]);
+        await publish(
+          workflowNodeStatusChannel(workflowId).status({
+            nodeId: node.id,
+            status: "success",
+          }),
+        );
+      } catch (error) {
+        await publish(
+          workflowNodeStatusChannel(workflowId).status({
+            nodeId: node.id,
+            status: "error",
+          }),
+        );
+        throw error;
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
     }
 
     await step.run("update-execution", async () => {
