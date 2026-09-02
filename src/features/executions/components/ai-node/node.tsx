@@ -56,8 +56,6 @@ export const AiTextNode = ({ nodeProps, nodeType }: AiTextNodeProps) => {
       <AiNodeDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        workflowId={workflowId}
-        nodeId={nodeProps.id}
         nodeType={nodeType}
         defaultValues={nodeProps.data}
         onSubmit={handleSubmit}

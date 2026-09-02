@@ -5,6 +5,10 @@ import { generateSlug } from "random-word-slugs";
 import { z } from "zod";
 import { PAGINATION } from "@/config/constants";
 import {
+  collectAiCredentialRefs,
+  findInvalidAiCredentialRef,
+} from "@/features/credentials/lib/ai-credentials";
+import {
   AI_NODE_TYPES,
   isAiNodeType,
 } from "@/features/executions/components/ai-node/config";
@@ -111,6 +115,29 @@ export const workflowsRouter = createTRPCRouter({
         where: { id, userId: ctx.auth.user.id },
       });
 
+      const aiCredentialRefs = collectAiCredentialRefs(nodes);
+      if (aiCredentialRefs.length > 0) {
+        const credentials = await prisma.credential.findMany({
+          where: {
+            id: {
+              in: [...new Set(aiCredentialRefs.map((ref) => ref.credentialId))],
+            },
+            userId: ctx.auth.user.id,
+          },
+          select: { id: true, type: true },
+        });
+        const invalidCredential = findInvalidAiCredentialRef(
+          aiCredentialRefs,
+          credentials,
+        );
+        if (invalidCredential) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: invalidCredential,
+          });
+        }
+      }
+
       // Transaction to ensure consistency
       return await prisma.$transaction(async (tx) => {
         const existingPrivateNodes = await tx.node.findMany({
@@ -200,8 +227,11 @@ export const workflowsRouter = createTRPCRouter({
 
             if (typeof node.type === "string" && isAiNodeType(node.type)) {
               delete data.apiKey;
+              const hasCredential =
+                typeof data.credentialId === "string" &&
+                data.credentialId.length > 0;
               const existingApiKey = aiApiKeys.get(node.id);
-              if (existingApiKey) {
+              if (!hasCredential && existingApiKey) {
                 data.apiKey = existingApiKey;
               }
             }
@@ -400,77 +430,6 @@ export const workflowsRouter = createTRPCRouter({
         configured: true,
         allowedEventTypes: input.allowedEventTypes,
       };
-    }),
-  getAiNodeSecretStatus: protectedProcedure
-    .input(
-      z.object({
-        workflowId: z.string(),
-        nodeId: z.string(),
-        nodeType: z.enum(AI_NODE_TYPES),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const node = await prisma.node.findFirst({
-        where: {
-          id: input.nodeId,
-          workflowId: input.workflowId,
-          type: input.nodeType,
-          workflow: { userId: ctx.auth.user.id },
-        },
-        select: { data: true },
-      });
-
-      if (!node) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Save the AI node before configuring its API key",
-        });
-      }
-
-      const data =
-        node.data && typeof node.data === "object" && !Array.isArray(node.data)
-          ? (node.data as Record<string, unknown>)
-          : {};
-
-      return { configured: typeof data.apiKey === "string" };
-    }),
-  saveAiNodeApiKey: protectedProcedure
-    .input(
-      z.object({
-        workflowId: z.string(),
-        nodeId: z.string(),
-        nodeType: z.enum(AI_NODE_TYPES),
-        apiKey: z.string().trim().min(8).max(2_000),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const node = await prisma.node.findFirst({
-        where: {
-          id: input.nodeId,
-          workflowId: input.workflowId,
-          type: input.nodeType,
-          workflow: { userId: ctx.auth.user.id },
-        },
-      });
-
-      if (!node) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Save the AI node before configuring its API key",
-        });
-      }
-
-      const data =
-        node.data && typeof node.data === "object" && !Array.isArray(node.data)
-          ? (node.data as Record<string, unknown>)
-          : {};
-
-      await prisma.node.update({
-        where: { id: node.id },
-        data: { data: { ...data, apiKey: input.apiKey } },
-      });
-
-      return { configured: true };
     }),
   execute: protectedProcedure
     .input(z.object({ id: z.string() }))
