@@ -161,4 +161,4 @@ npm run inngest:dev  # Inngest dev server only
 
 ## License
 
-This project is for educational purposes, built following [Code With Antonio's](https://www.youtube.com/@codewithantonio) tutorial series.
+MIT
