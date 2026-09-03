@@ -87,7 +87,7 @@ test("rejects missing or mismatched credentials on AI nodes", () => {
     findInvalidAiCredentialRef(refs, [
       { id: "cred_openai", type: CredentialType.ANTHROPIC },
     ]),
-    "Credential type does not match this AI node",
+    "Credential type does not match this node",
   );
   assert.equal(
     findInvalidAiCredentialRef(refs, []),
@@ -151,6 +151,6 @@ test("fails closed when a selected credential is missing", async () => {
         },
         async () => null,
       ),
-    /Credential not found or incompatible with this AI node/,
+    /Credential not found or incompatible with this node/,
   );
 });
