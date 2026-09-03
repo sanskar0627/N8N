@@ -12,6 +12,10 @@ import {
   AI_NODE_TYPES,
   isAiNodeType,
 } from "@/features/executions/components/ai-node/config";
+import {
+  isWebhookMessageNodeType,
+  WEBHOOK_MESSAGE_NODE_TYPES,
+} from "@/features/executions/components/webhook-message/config";
 import { executeNodeForTest } from "@/features/executions/lib/test-executor";
 import {
   findDuplicateVariableNames,
@@ -148,6 +152,7 @@ export const workflowsRouter = createTRPCRouter({
                 NodeType.GOOGLE_FORM_TRIGGER,
                 NodeType.STRIPE_TRIGGER,
                 ...AI_NODE_TYPES,
+                ...WEBHOOK_MESSAGE_NODE_TYPES,
               ],
             },
           },
@@ -198,6 +203,21 @@ export const workflowsRouter = createTRPCRouter({
             },
           ),
         );
+        const webhookUrls = new Map(
+          existingPrivateNodes.flatMap(
+            (node: { id: string; data: unknown }) => {
+              const data =
+                node.data &&
+                typeof node.data === "object" &&
+                !Array.isArray(node.data)
+                  ? (node.data as Record<string, unknown>)
+                  : {};
+              return typeof data.webhookUrl === "string"
+                ? [[node.id, data.webhookUrl] as const]
+                : [];
+            },
+          ),
+        );
 
         // Delete existing nodes and connections (cascade deletes connections)
         await tx.node.deleteMany({
@@ -233,6 +253,20 @@ export const workflowsRouter = createTRPCRouter({
               const existingApiKey = aiApiKeys.get(node.id);
               if (!hasCredential && existingApiKey) {
                 data.apiKey = existingApiKey;
+              }
+            }
+
+            if (
+              typeof node.type === "string" &&
+              isWebhookMessageNodeType(node.type)
+            ) {
+              delete data.webhookUrl;
+              const hasCredential =
+                typeof data.credentialId === "string" &&
+                data.credentialId.length > 0;
+              const existingWebhookUrl = webhookUrls.get(node.id);
+              if (!hasCredential && existingWebhookUrl) {
+                data.webhookUrl = existingWebhookUrl;
               }
             }
 
@@ -475,6 +509,10 @@ export const workflowsRouter = createTRPCRouter({
 
           if (isAiNodeType(node.type)) {
             delete data.apiKey;
+          }
+
+          if (isWebhookMessageNodeType(node.type)) {
+            delete data.webhookUrl;
           }
 
           return {

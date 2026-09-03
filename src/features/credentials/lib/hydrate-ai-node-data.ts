@@ -1,9 +1,13 @@
 import { NonRetriableError } from "inngest";
-import { isAiNodeType } from "@/features/executions/components/ai-node/config";
 import type { CredentialType, NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
-import { getCredentialTypeForAiNode } from "../config";
+import {
+  getCredentialTypeForNode,
+  isCredentialNodeType,
+  WEBHOOK_NODE_CREDENTIAL_TYPES,
+} from "../config";
 import { readCredentialValue } from "./credential-value";
+import { isAllowedWebhookUrl, isWebhookCredentialType } from "./webhook-url";
 
 type CredentialLookup = (input: {
   id: string;
@@ -17,7 +21,15 @@ const findCredential: CredentialLookup = ({ id, userId, type }) =>
     select: { value: true },
   });
 
-export const hydrateAiNodeData = async (
+const secretFieldForNode = (nodeType: NodeType) => {
+  if (nodeType in WEBHOOK_NODE_CREDENTIAL_TYPES) {
+    return "webhookUrl";
+  }
+
+  return "apiKey";
+};
+
+export const hydrateNodeData = async (
   {
     nodeType,
     data,
@@ -29,11 +41,13 @@ export const hydrateAiNodeData = async (
   },
   lookup: CredentialLookup = findCredential,
 ) => {
-  if (!isAiNodeType(nodeType)) {
+  if (!isCredentialNodeType(nodeType)) {
     return data;
   }
 
-  if (typeof data.apiKey === "string" && data.apiKey.length > 0) {
+  const secretField = secretFieldForNode(nodeType);
+  const existingSecret = data[secretField];
+  if (typeof existingSecret === "string" && existingSecret.length > 0) {
     return data;
   }
 
@@ -41,20 +55,31 @@ export const hydrateAiNodeData = async (
     return data;
   }
 
+  const credentialType = getCredentialTypeForNode(nodeType);
   const credential = await lookup({
     id: data.credentialId,
     userId,
-    type: getCredentialTypeForAiNode(nodeType),
+    type: credentialType,
   });
 
   if (!credential) {
     throw new NonRetriableError(
-      "Credential not found or incompatible with this AI node",
+      "Credential not found or incompatible with this node",
     );
+  }
+
+  const value = readCredentialValue(credential.value);
+  if (
+    isWebhookCredentialType(credentialType) &&
+    !isAllowedWebhookUrl(value, credentialType)
+  ) {
+    throw new NonRetriableError("Credential webhook URL is invalid");
   }
 
   return {
     ...data,
-    apiKey: readCredentialValue(credential.value),
+    [secretField]: value,
   };
 };
+
+export const hydrateAiNodeData = hydrateNodeData;

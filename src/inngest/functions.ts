@@ -1,5 +1,5 @@
 import { NonRetriableError } from "inngest";
-import { hydrateAiNodeData } from "@/features/credentials/lib/hydrate-ai-node-data";
+import { hydrateNodeData } from "@/features/credentials/lib/hydrate-ai-node-data";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import { ExecutionStatus, type NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
@@ -66,7 +66,7 @@ export const executeWorkflow = inngest.createFunction(
 
     for (const node of sortedNodes) {
       const executor = getExecutor(node.type as NodeType);
-      const nodeData = await hydrateAiNodeData({
+      const nodeData = await hydrateNodeData({
         nodeType: node.type,
         data: node.data as Record<string, unknown>,
         userId,

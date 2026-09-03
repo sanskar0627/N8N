@@ -1,7 +1,9 @@
 import { NonRetriableError } from "inngest";
 import ky from "ky";
+import { isAllowedWebhookUrl } from "@/features/credentials/lib/webhook-url";
 import { resolveTemplate } from "@/features/executions/lib/template";
 import type { NodeExecutor } from "@/features/executions/types";
+import { CredentialType } from "@/generated/prisma/enums";
 import { discordChannel } from "@/inngest/channels/discord";
 
 type DiscordData = {
@@ -34,6 +36,10 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
     const result = await step.run("discord-webhook", async () => {
       if (!data.webhookUrl) {
         throw new NonRetriableError("Discord Node: Webhook URL is required");
+      }
+
+      if (!isAllowedWebhookUrl(data.webhookUrl, CredentialType.DISCORD)) {
+        throw new NonRetriableError("Discord Node: Webhook URL is invalid");
       }
 
       if (!data.variableName) {
