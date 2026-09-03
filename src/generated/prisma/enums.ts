@@ -37,7 +37,9 @@ export type ExecutionStatus = (typeof ExecutionStatus)[keyof typeof ExecutionSta
 export const CredentialType = {
   OPENROUTER: 'OPENROUTER',
   ANTHROPIC: 'ANTHROPIC',
-  GEMINI: 'GEMINI'
+  GEMINI: 'GEMINI',
+  DISCORD: 'DISCORD',
+  SLACK: 'SLACK'
 } as const
 
 export type CredentialType = (typeof CredentialType)[keyof typeof CredentialType]

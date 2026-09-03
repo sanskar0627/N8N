@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -28,8 +28,8 @@ import {
   CREDENTIAL_TYPES,
 } from "@/features/credentials/config";
 import {
-  credentialNameSchema,
-  credentialValueSchema,
+  credentialFormSchema,
+  credentialUpdateFormSchema,
 } from "@/features/credentials/schema";
 import type { PublicCredential } from "@/features/credentials/types";
 import type { CredentialType } from "@/generated/prisma/enums";
@@ -38,19 +38,7 @@ import {
   useUpdateCredential,
 } from "../hooks/use-credentials";
 
-const createFormSchema = z.object({
-  name: credentialNameSchema,
-  type: z.enum(CREDENTIAL_TYPES),
-  value: credentialValueSchema,
-});
-
-const updateFormSchema = z.object({
-  name: credentialNameSchema,
-  type: z.enum(CREDENTIAL_TYPES),
-  value: z.union([credentialValueSchema, z.literal("")]),
-});
-
-type CredentialFormValues = z.infer<typeof updateFormSchema>;
+type CredentialFormValues = z.infer<typeof credentialUpdateFormSchema>;
 
 interface CredentialFormProps {
   initialData?: PublicCredential;
@@ -73,7 +61,9 @@ export const CredentialForm = ({
   const isEditing = Boolean(initialData);
   const isPending = createCredential.isPending || updateCredential.isPending;
   const form = useForm<CredentialFormValues>({
-    resolver: zodResolver(isEditing ? updateFormSchema : createFormSchema),
+    resolver: zodResolver(
+      isEditing ? credentialUpdateFormSchema : credentialFormSchema,
+    ),
     defaultValues: {
       name: initialData?.name ?? "",
       type: initialData?.type ?? defaultType ?? CREDENTIAL_TYPES[0],
