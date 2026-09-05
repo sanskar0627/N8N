@@ -20,9 +20,11 @@
 
 ## Key Features
 
-- **Visual Workflow Editor** - Design multi-step AI workflows with a drag-and-drop canvas
+- **Visual Workflow Editor** - Design multi-step AI workflows with a ReactFlow-powered drag-and-drop canvas
+- **Custom Node System** - Modular, extensible node architecture with trigger nodes (Manual Trigger) and execution nodes (HTTP Request), with a registry-based component system
 - **Multi-Provider AI** - Connect to Google Gemini, Anthropic Claude, and OpenRouter (Nvidia, Meta, and more) without vendor lock-in
 - **Credential Management** - Securely store and manage API keys and service credentials
+- **Node Selector** - Sheet-based node picker with categorized triggers and execution nodes, smart positioning, and duplicate trigger prevention
 - **Premium Gating** - Built-in subscription management via Polar for free/pro tier access control
 - **Background Execution** - Reliable workflow runs powered by Inngest step functions
 - **Authentication** - Email/password, Google, and GitHub sign-in via Better Auth
@@ -40,6 +42,7 @@
 | **Billing** | Polar (subscription management) |
 | **Background Jobs** | Inngest v4 (step functions, AI wrapping) |
 | **AI Providers** | Google Gemini, Anthropic Claude, OpenRouter |
+| **Workflow Canvas** | ReactFlow (@xyflow/react) |
 | **Monitoring** | Sentry (errors, AI telemetry) |
 | **UI** | Tailwind CSS v4, shadcn/ui, Radix UI |
 | **Linting** | Biome |
@@ -69,8 +72,8 @@ cp .env.example .env
 # Generate Prisma client
 npx prisma generate
 
-# Push schema to database
-npx prisma db push
+# Run database migrations
+npx prisma migrate dev
 
 # Start dev server + Inngest
 npm run dev:all
@@ -120,11 +123,39 @@ src/
 │       ├── inngest/                   # Inngest endpoint
 │       └── trpc/[trpc]/              # tRPC handler
 ├── components/
+│   ├── react-flow/
+│   │   ├── base-node.tsx              # Base node layout (header, content, footer)
+│   │   ├── base-handle.tsx            # Styled ReactFlow handle
+│   │   └── placeholder-node.tsx       # Placeholder node with click action
 │   ├── ui/                            # shadcn/ui primitives
+│   ├── initial-node.tsx               # Starting node with node selector
+│   ├── node-selector.tsx              # Sheet-based node picker (triggers + executions)
+│   ├── workflow-node.tsx              # Node wrapper with toolbar (name, delete, settings)
 │   ├── entity-components.tsx          # Reusable list page layout
 │   └── upgrade-modal.tsx              # Pro upgrade prompt
+├── config/
+│   ├── node-components.ts             # Node type registry (maps NodeType to React components)
+│   └── constants.ts                   # App constants
 ├── features/
-│   ├── auth/                          # Auth forms
+│   ├── auth/
+│   │   └── components/                # Login, register, auth layout
+│   ├── editor/
+│   │   └── components/
+│   │       ├── editor.tsx             # Main workflow editor canvas
+│   │       ├── editor-header.tsx      # Editor top bar
+│   │       └── add-node-button.tsx    # Floating add node button with selector
+│   ├── executions/
+│   │   └── components/
+│   │       ├── base-execution-node.tsx # Reusable execution node wrapper
+│   │       └── http-request/
+│   │           └── node.tsx           # HTTP Request node (GET/POST/PUT/PATCH/DELETE)
+│   ├── triggers/
+│   │   └── components/
+│   │       ├── base-trigger-node.tsx   # Reusable trigger node wrapper
+│   │       └── manual-trigger/
+│   │           └── node.tsx           # Manual trigger node
+│   ├── subscriptions/
+│   │   └── hooks/                     # Subscription/premium hooks
 │   └── workflows/
 │       ├── components/                # Workflow UI components
 │       ├── hooks/                     # Client-side hooks
@@ -146,6 +177,23 @@ src/
     ├── server.tsx                      # SSR prefetch helpers
     └── routers/_app.ts                # Root router
 ```
+
+## Node System Architecture
+
+The workflow editor uses a registry-based node system built on ReactFlow:
+
+**Node Types** (defined in Prisma schema):
+- `INITIAL` - Starting node, entry point of every workflow
+- `MANUAL_TRIGGER` - Trigger node activated by clicking "Execute workflow"
+- `HTTP_REQUEST` - Execution node for making HTTP requests
+
+**Component Hierarchy**:
+- `BaseNode` / `BaseHandle` - Low-level ReactFlow primitives
+- `WorkflowNode` - Adds toolbar with name, description, delete, and settings actions
+- `BaseTriggerNode` / `BaseExecutionNode` - Category wrappers that compose WorkflowNode + BaseNode + BaseHandle
+- `ManualTriggerNode` / `HttpRequestNode` - Concrete node implementations
+
+New node types are added by creating a component under `features/triggers/` or `features/executions/`, then registering it in `config/node-components.ts`.
 
 ## Scripts
 
