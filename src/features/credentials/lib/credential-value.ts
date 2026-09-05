@@ -1,3 +1,5 @@
-export const storeCredentialValue = (value: string) => value;
+import { decrypt, encrypt } from "@/lib/encryption";
 
-export const readCredentialValue = (value: string) => value;
+export const storeCredentialValue = (value: string) => encrypt(value);
+
+export const readCredentialValue = (value: string) => decrypt(value);
