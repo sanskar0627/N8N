@@ -5,16 +5,13 @@ import {
   collectAiCredentialRefs,
   findInvalidAiCredentialRef,
 } from "../src/features/credentials/lib/ai-credentials";
-import {
-  readCredentialValue,
-  storeCredentialValue,
-} from "../src/features/credentials/lib/credential-value";
 import { hydrateAiNodeData } from "../src/features/credentials/lib/hydrate-ai-node-data";
 import {
   createCredentialSchema,
   updateCredentialSchema,
 } from "../src/features/credentials/schema";
 import { CredentialType, NodeType } from "../src/generated/prisma/enums";
+import { encrypt } from "../src/lib/encryption";
 
 test("maps each AI node to the matching reusable credential type", () => {
   assert.equal(
@@ -58,11 +55,6 @@ test("validates credential create and update payloads", () => {
   );
 });
 
-test("keeps credential values write-through until encryption is added", () => {
-  assert.equal(storeCredentialValue("sk-ant-secret"), "sk-ant-secret");
-  assert.equal(readCredentialValue("sk-ant-secret"), "sk-ant-secret");
-});
-
 test("collects only AI node credential references", () => {
   assert.deepEqual(
     collectAiCredentialRefs([
@@ -99,6 +91,33 @@ test("rejects missing or mismatched credentials on AI nodes", () => {
     ]),
     null,
   );
+});
+
+test("decrypts encrypted credentials while hydrating AI nodes", async () => {
+  const previousKey = process.env.ENCRYPTION_KEY;
+  process.env.ENCRYPTION_KEY = "m9m-test-encryption-key";
+
+  try {
+    const hydrated = await hydrateAiNodeData(
+      {
+        nodeType: NodeType.OPENAI,
+        userId: "user_1",
+        data: {
+          credentialId: "cred_openai",
+          model: "openai/gpt-4o-mini",
+        },
+      },
+      async () => ({ value: encrypt("sk-or-v1-hydrated") }),
+    );
+
+    assert.equal(hydrated.apiKey, "sk-or-v1-hydrated");
+  } finally {
+    if (previousKey === undefined) {
+      delete process.env.ENCRYPTION_KEY;
+    } else {
+      process.env.ENCRYPTION_KEY = previousKey;
+    }
+  }
 });
 
 test("hydrates AI node data from a saved credential", async () => {
