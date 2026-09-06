@@ -1,14 +1,8 @@
-import type { NodeExecutor } from "@/features/executions/types";
 import { NonRetriableError } from "inngest";
 import ky, { type Options as KyOptions } from "ky";
-import Handlebars from "handlebars";
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
 import { httpRequestChannel } from "@/inngest/channels/http-request";
-
-Handlebars.registerHelper("json", (context) => {
-  const jsonString = JSON.stringify(context);
-  const safeString = new Handlebars.SafeString(jsonString);
-  return safeString;
-});
 
 type HttpRequestData = {
   variableName?: string;
@@ -35,40 +29,50 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
   try {
     const result = await step.run("http-request", async () => {
       if (!data?.variableName) {
-        await publish(
-          httpRequestChannel().status({ nodeId, status: "error" }),
-        );
+        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
         throw new NonRetriableError(
           "HTTP Request node: No variable name configured.",
         );
       }
 
       if (!data?.endpoint) {
-        await publish(
-          httpRequestChannel().status({ nodeId, status: "error" }),
-        );
+        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
         throw new NonRetriableError(
           "HTTP Request node: No endpoint configured.",
         );
       }
 
       if (!data?.method) {
-        await publish(
-          httpRequestChannel().status({ nodeId, status: "error" }),
-        );
-        throw new NonRetriableError(
-          "HTTP Request node: No method configured.",
-        );
+        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
+        throw new NonRetriableError("HTTP Request node: No method configured.");
       }
 
-      const endpoint = Handlebars.compile(data.endpoint)(context);
+      const endpoint = resolveTemplate(data.endpoint, context, "endpoint");
+      let parsedEndpoint: URL;
+      try {
+        parsedEndpoint = new URL(endpoint);
+      } catch (error) {
+        throw new NonRetriableError(
+          "HTTP Request node: Endpoint must resolve to a valid URL.",
+          { cause: error },
+        );
+      }
+      if (!["http:", "https:"].includes(parsedEndpoint.protocol)) {
+        throw new NonRetriableError(
+          "HTTP Request node: Endpoint must use HTTP or HTTPS.",
+        );
+      }
       const method = data.method;
 
       const userHeaders: Record<string, string> = {};
       if (data.headers && data.headers.length > 0) {
         for (const header of data.headers) {
           if (header.key) {
-            const resolvedValue = Handlebars.compile(header.value)(context);
+            const resolvedValue = resolveTemplate(
+              header.value,
+              context,
+              `header "${header.key}"`,
+            );
             userHeaders[header.key] = resolvedValue;
           }
         }
@@ -80,8 +84,19 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
       };
 
       if (["POST", "PUT", "PATCH"].includes(method)) {
-        const resolved = Handlebars.compile(data.body || "{}")(context);
-        JSON.parse(resolved);
+        const resolved = resolveTemplate(
+          data.body || "{}",
+          context,
+          "request body",
+        );
+        try {
+          JSON.parse(resolved);
+        } catch (error) {
+          throw new NonRetriableError(
+            "HTTP Request node: Body must resolve to valid JSON.",
+            { cause: error },
+          );
+        }
         options.body = resolved;
         options.headers = {
           "Content-Type": "application/json",
