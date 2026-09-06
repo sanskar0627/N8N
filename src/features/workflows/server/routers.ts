@@ -1,13 +1,21 @@
 import { TRPCError } from "@trpc/server";
-import { executeNodeForTest } from "@/features/executions/lib/test-executor";
-import { PAGINATION } from "@/config/constants";
-import prisma from "@/lib/db";
-import { createTRPCRouter, premiumProcedure, protectedProcedure } from "@/trpc/init";
+import type { Edge, Node } from "@xyflow/react";
 import { generateSlug } from "random-word-slugs";
 import { z } from "zod";
+import { PAGINATION } from "@/config/constants";
+import { executeNodeForTest } from "@/features/executions/lib/test-executor";
+import {
+  findDuplicateVariableNames,
+  variableNameSchema,
+} from "@/features/executions/lib/variable-name";
 import { NodeType } from "@/generated/prisma";
-import type { Node, Edge } from "@xyflow/react";
 import { sendWorkflowExecution } from "@/inngest/utils";
+import prisma from "@/lib/db";
+import {
+  createTRPCRouter,
+  premiumProcedure,
+  protectedProcedure,
+} from "@/trpc/init";
 
 export const workflowsRouter = createTRPCRouter({
   create: premiumProcedure.mutation(({ ctx }) => {
@@ -33,7 +41,7 @@ export const workflowsRouter = createTRPCRouter({
           id: input.id,
           userId: ctx.auth.user.id,
         },
-      })
+      });
     }),
   updateName: protectedProcedure
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
@@ -63,18 +71,39 @@ export const workflowsRouter = createTRPCRouter({
             targetHandle: z.string().nullish(),
           }),
         ),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { id, nodes, edges } = input;
+      const variableNames = nodes.flatMap((node) => {
+        const variableName = node.data?.variableName;
+        return typeof variableName === "string" ? [variableName] : [];
+      });
+
+      for (const variableName of variableNames) {
+        const result = variableNameSchema.safeParse(variableName);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.error.issues[0]?.message ?? "Invalid variable name",
+          });
+        }
+      }
+
+      const duplicateVariableNames = findDuplicateVariableNames(nodes);
+      if (duplicateVariableNames.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Variable names must be unique. Duplicates: ${duplicateVariableNames.join(", ")}`,
+        });
+      }
 
       const workflow = await prisma.workflow.findUniqueOrThrow({
         where: { id, userId: ctx.auth.user.id },
       });
 
       // Transaction to ensure consistency
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await prisma.$transaction(async (tx: any) => {
+      return await prisma.$transaction(async (tx) => {
         // Delete existing nodes and connections (cascade deletes connections)
         await tx.node.deleteMany({
           where: { workflowId: id },
@@ -132,21 +161,36 @@ export const workflowsRouter = createTRPCRouter({
       });
 
       // Transform server nodes to react-flow compatible nodes
-      const nodes: Node[] = workflow.nodes.map((node: { id: string; type: string; position: unknown; data: unknown }) => ({
-        id: node.id,
-        type: node.type,
-        position: node.position as { x: number, y: number },
-        data: (node.data as Record<string, unknown>) || {},
-      }));
+      const nodes: Node[] = workflow.nodes.map(
+        (node: {
+          id: string;
+          type: string;
+          position: unknown;
+          data: unknown;
+        }) => ({
+          id: node.id,
+          type: node.type,
+          position: node.position as { x: number; y: number },
+          data: (node.data as Record<string, unknown>) || {},
+        }),
+      );
 
       // Transform server connections to react-flow compatible edges
-      const edges: Edge[] = workflow.connection.map((connection: { id: string; fromNodeId: string; toNodeId: string; fromOutput: string; toInput: string }) => ({
-        id: connection.id,
-        source: connection.fromNodeId,
-        target: connection.toNodeId,
-        sourceHandle: connection.fromOutput,
-        targetHandle: connection.toInput,
-      }))
+      const edges: Edge[] = workflow.connection.map(
+        (connection: {
+          id: string;
+          fromNodeId: string;
+          toNodeId: string;
+          fromOutput: string;
+          toInput: string;
+        }) => ({
+          id: connection.id,
+          source: connection.fromNodeId,
+          target: connection.toNodeId,
+          sourceHandle: connection.fromOutput,
+          targetHandle: connection.toInput,
+        }),
+      );
 
       return {
         id: workflow.id,
@@ -165,7 +209,7 @@ export const workflowsRouter = createTRPCRouter({
           .max(PAGINATION.MAX_PAGE_SIZE)
           .default(PAGINATION.DEFAULT_PAGE_SIZE),
         search: z.string().default(""),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const { page, pageSize, search } = input;
@@ -211,11 +255,13 @@ export const workflowsRouter = createTRPCRouter({
       };
     }),
   executeNode: premiumProcedure
-    .input(z.object({
-      workflowId: z.string(),
-      nodeId: z.string(),
-      mockContext: z.record(z.string(), z.any()).optional(),
-    }))
+    .input(
+      z.object({
+        workflowId: z.string(),
+        nodeId: z.string(),
+        mockContext: z.record(z.string(), z.any()).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const result = await executeNodeForTest({
         workflowId: input.workflowId,
@@ -225,13 +271,19 @@ export const workflowsRouter = createTRPCRouter({
       });
 
       if (!result.success) {
-        let code: "NOT_FOUND" | "FORBIDDEN" | "BAD_REQUEST" | "INTERNAL_SERVER_ERROR" = "INTERNAL_SERVER_ERROR";
+        let code:
+          | "NOT_FOUND"
+          | "FORBIDDEN"
+          | "BAD_REQUEST"
+          | "INTERNAL_SERVER_ERROR" = "INTERNAL_SERVER_ERROR";
 
         if (result.error === "Node not found") {
           code = "NOT_FOUND";
         } else if (result.error === "Unauthorized") {
           code = "FORBIDDEN";
-        } else if (result.error === "Trigger nodes cannot be tested individually") {
+        } else if (
+          result.error === "Trigger nodes cannot be tested individually"
+        ) {
           code = "BAD_REQUEST";
         }
 
