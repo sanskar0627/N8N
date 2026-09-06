@@ -1,7 +1,7 @@
-import prisma from "@/lib/db";
-import { NodeType } from "@/generated/prisma";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import type { WorkflowContext } from "@/features/executions/types";
+import { NodeType } from "@/generated/prisma";
+import prisma from "@/lib/db";
 
 const TRIGGER_NODE_TYPES: NodeType[] = [
   NodeType.INITIAL,
@@ -100,6 +100,7 @@ export async function executeNodeForTest(
           ? (node.data as Record<string, unknown>)
           : {},
       nodeId: node.id,
+      workflowId,
       userId,
       context: mockContext,
       step,

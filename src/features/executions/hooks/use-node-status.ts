@@ -2,6 +2,10 @@ import type { Realtime } from "@inngest/realtime";
 import { useInngestSubscription } from "@inngest/realtime/hooks";
 import { useEffect, useState } from "react";
 import type { NodeStatus } from "@/components/react-flow/node-status-indicator";
+import {
+  getLatestNodeStatus,
+  WORKFLOW_EXECUTION_STARTED_EVENT,
+} from "@/features/executions/lib/realtime-status";
 
 interface UseNodeStatusOptions {
   nodeId: string;
@@ -24,28 +28,23 @@ export function useNodeStatus({
   });
 
   useEffect(() => {
-    if (!data?.length) return;
+    const latestStatus = getLatestNodeStatus(data ?? [], {
+      nodeId,
+      channel,
+      topic,
+    });
 
-    const latestMessage = data
-      .filter(
-        (message) =>
-          message.channel === channel &&
-          message.topic === topic &&
-          message.data.nodeId === nodeId,
-      )
-      .sort((a, b) => {
-        if (a.kind === "data" && b.kind === "data") {
-          return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        }
-        return 0;
-      })[0];
-
-    if (latestMessage?.kind === "data") {
-      setStatus(latestMessage.data.status as NodeStatus);
+    if (latestStatus) {
+      setStatus(latestStatus);
     }
   }, [data, nodeId, channel, topic]);
+
+  useEffect(() => {
+    const resetStatus = () => setStatus("initial");
+    window.addEventListener(WORKFLOW_EXECUTION_STARTED_EVENT, resetStatus);
+    return () =>
+      window.removeEventListener(WORKFLOW_EXECUTION_STARTED_EVENT, resetStatus);
+  }, []);
 
   return status;
 }

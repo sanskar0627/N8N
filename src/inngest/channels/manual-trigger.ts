@@ -1,6 +1,7 @@
 import { channel, topic } from "@inngest/realtime";
 
-export const manualTriggerChannelName = "manual-trigger-execution";
+export const manualTriggerChannelName = (workflowId: string) =>
+  `workflow:${workflowId}:manual-trigger-execution`;
 
 export const manualTriggerChannel = channel(manualTriggerChannelName).addTopic(
   topic("status").type<{

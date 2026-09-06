@@ -1,18 +1,9 @@
 import { NonRetriableError } from "inngest";
-import { inngest } from "./client";
-import prisma from "@/lib/db";
-import { topologicalSort } from "./utils";
-import { ExecutionStatus, NodeType } from "@/generated/prisma";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
-import { httpRequestChannel } from "./channels/http-request";
-import { manualTriggerChannel } from "./channels/manual-trigger";
-import { googleFormTriggerChannel } from "./channels/google-form-trigger";
-import { stripeTriggerChannel } from "./channels/stripe-trigger";
-import { geminiChannel } from "./channels/gemini";
-import { openAIChannel } from "./channels/openai";
-import { anthropicChannel } from "./channels/anthropic";
-import { discordChannel } from "./channels/discord";
-import { slackChannel } from "./channels/slack";
+import { ExecutionStatus, type NodeType } from "@/generated/prisma";
+import prisma from "@/lib/db";
+import { inngest } from "./client";
+import { topologicalSort } from "./utils";
 
 export const executeWorkflow = inngest.createFunction(
   {
@@ -29,20 +20,7 @@ export const executeWorkflow = inngest.createFunction(
       });
     },
   },
-  {
-    event: "workflows/execute.workflow",
-    channels: [
-      httpRequestChannel(),
-      manualTriggerChannel(),
-      googleFormTriggerChannel(),
-      stripeTriggerChannel(),
-      geminiChannel(),
-      openAIChannel(),
-      anthropicChannel(),
-      discordChannel(),
-      slackChannel(),
-    ],
-  },
+  { event: "workflows/execute.workflow" },
   async ({ event, step, publish }) => {
     const inngestEventId = event.id;
     const workflowId = event.data.workflowId;
@@ -90,6 +68,7 @@ export const executeWorkflow = inngest.createFunction(
       const executePromise = executor({
         data: node.data as Record<string, unknown>,
         nodeId: node.id,
+        workflowId,
         userId,
         context,
         step,

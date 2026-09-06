@@ -15,12 +15,13 @@ type HttpRequestData = {
 export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
   data,
   nodeId,
+  workflowId,
   context,
   step,
   publish,
 }) => {
   await publish(
-    httpRequestChannel().status({
+    httpRequestChannel(workflowId).status({
       nodeId,
       status: "loading",
     }),
@@ -29,21 +30,27 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
   try {
     const result = await step.run("http-request", async () => {
       if (!data?.variableName) {
-        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
+        await publish(
+          httpRequestChannel(workflowId).status({ nodeId, status: "error" }),
+        );
         throw new NonRetriableError(
           "HTTP Request node: No variable name configured.",
         );
       }
 
       if (!data?.endpoint) {
-        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
+        await publish(
+          httpRequestChannel(workflowId).status({ nodeId, status: "error" }),
+        );
         throw new NonRetriableError(
           "HTTP Request node: No endpoint configured.",
         );
       }
 
       if (!data?.method) {
-        await publish(httpRequestChannel().status({ nodeId, status: "error" }));
+        await publish(
+          httpRequestChannel(workflowId).status({ nodeId, status: "error" }),
+        );
         throw new NonRetriableError("HTTP Request node: No method configured.");
       }
 
@@ -126,7 +133,7 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
     });
 
     await publish(
-      httpRequestChannel().status({
+      httpRequestChannel(workflowId).status({
         nodeId,
         status: "success",
       }),
@@ -135,7 +142,7 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
     return result;
   } catch (error) {
     await publish(
-      httpRequestChannel().status({
+      httpRequestChannel(workflowId).status({
         nodeId,
         status: "error",
       }),
