@@ -9,6 +9,10 @@ import {
   findDuplicateVariableNames,
   variableNameSchema,
 } from "@/features/executions/lib/variable-name";
+import {
+  stripeEventTypesSchema,
+  stripeWebhookSecretSchema,
+} from "@/features/triggers/components/stripe-trigger/schema";
 import { NodeType } from "@/generated/prisma/enums";
 import { sendWorkflowExecution } from "@/inngest/utils";
 import prisma from "@/lib/db";
@@ -108,7 +112,9 @@ export const workflowsRouter = createTRPCRouter({
         const existingTriggerNodes = await tx.node.findMany({
           where: {
             workflowId: id,
-            type: NodeType.GOOGLE_FORM_TRIGGER,
+            type: {
+              in: [NodeType.GOOGLE_FORM_TRIGGER, NodeType.STRIPE_TRIGGER],
+            },
           },
           select: { id: true, data: true },
         });
@@ -123,6 +129,21 @@ export const workflowsRouter = createTRPCRouter({
                   : {};
               return typeof data.secret === "string"
                 ? [[node.id, data.secret] as const]
+                : [];
+            },
+          ),
+        );
+        const stripeWebhookSecrets = new Map(
+          existingTriggerNodes.flatMap(
+            (node: { id: string; data: unknown }) => {
+              const data =
+                node.data &&
+                typeof node.data === "object" &&
+                !Array.isArray(node.data)
+                  ? (node.data as Record<string, unknown>)
+                  : {};
+              return typeof data.webhookSecret === "string"
+                ? [[node.id, data.webhookSecret] as const]
                 : [];
             },
           ),
@@ -143,6 +164,14 @@ export const workflowsRouter = createTRPCRouter({
               const existingSecret = googleFormSecrets.get(node.id);
               if (existingSecret) {
                 data.secret = existingSecret;
+              }
+            }
+
+            if (node.type === NodeType.STRIPE_TRIGGER) {
+              delete data.webhookSecret;
+              const existingSecret = stripeWebhookSecrets.get(node.id);
+              if (existingSecret) {
+                data.webhookSecret = existingSecret;
               }
             }
 
@@ -255,6 +284,92 @@ export const workflowsRouter = createTRPCRouter({
 
       return { secret: updatedData.secret };
     }),
+  getStripeWebhookConfig: protectedProcedure
+    .input(z.object({ workflowId: z.string(), nodeId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const node = await prisma.node.findFirst({
+        where: {
+          id: input.nodeId,
+          workflowId: input.workflowId,
+          type: NodeType.STRIPE_TRIGGER,
+          workflow: { userId: ctx.auth.user.id },
+        },
+        select: { data: true },
+      });
+
+      if (!node) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Save the Stripe Trigger before configuring it",
+        });
+      }
+
+      const data =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+
+      return {
+        configured: typeof data.webhookSecret === "string",
+        allowedEventTypes:
+          stripeEventTypesSchema.safeParse(data.allowedEventTypes).data ?? [],
+      };
+    }),
+  saveStripeWebhookConfig: protectedProcedure
+    .input(
+      z.object({
+        workflowId: z.string(),
+        nodeId: z.string(),
+        webhookSecret: stripeWebhookSecretSchema.optional(),
+        allowedEventTypes: stripeEventTypesSchema.default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const node = await prisma.node.findFirst({
+        where: {
+          id: input.nodeId,
+          workflowId: input.workflowId,
+          type: NodeType.STRIPE_TRIGGER,
+          workflow: { userId: ctx.auth.user.id },
+        },
+      });
+
+      if (!node) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Save the Stripe Trigger before configuring it",
+        });
+      }
+
+      const data =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+      const webhookSecret = input.webhookSecret ?? data.webhookSecret;
+
+      if (typeof webhookSecret !== "string") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Stripe webhook signing secret is required",
+        });
+      }
+
+      await prisma.node.update({
+        where: { id: node.id },
+        data: {
+          data: {
+            ...data,
+            webhookSecret,
+            allowedEventTypes: input.allowedEventTypes,
+          },
+        },
+      });
+
+      return {
+        configured: true,
+        allowedEventTypes: input.allowedEventTypes,
+      };
+    }),
   execute: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -291,6 +406,10 @@ export const workflowsRouter = createTRPCRouter({
 
           if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
             delete data.secret;
+          }
+
+          if (node.type === NodeType.STRIPE_TRIGGER) {
+            delete data.webhookSecret;
           }
 
           return {
