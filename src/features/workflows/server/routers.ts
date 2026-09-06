@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import type { Edge, Node } from "@xyflow/react";
 import { generateSlug } from "random-word-slugs";
@@ -8,7 +9,7 @@ import {
   findDuplicateVariableNames,
   variableNameSchema,
 } from "@/features/executions/lib/variable-name";
-import { NodeType } from "@/generated/prisma";
+import { NodeType } from "@/generated/prisma/enums";
 import { sendWorkflowExecution } from "@/inngest/utils";
 import prisma from "@/lib/db";
 import {
@@ -104,6 +105,29 @@ export const workflowsRouter = createTRPCRouter({
 
       // Transaction to ensure consistency
       return await prisma.$transaction(async (tx) => {
+        const existingTriggerNodes = await tx.node.findMany({
+          where: {
+            workflowId: id,
+            type: NodeType.GOOGLE_FORM_TRIGGER,
+          },
+          select: { id: true, data: true },
+        });
+        const googleFormSecrets = new Map(
+          existingTriggerNodes.flatMap(
+            (node: { id: string; data: unknown }) => {
+              const data =
+                node.data &&
+                typeof node.data === "object" &&
+                !Array.isArray(node.data)
+                  ? (node.data as Record<string, unknown>)
+                  : {};
+              return typeof data.secret === "string"
+                ? [[node.id, data.secret] as const]
+                : [];
+            },
+          ),
+        );
+
         // Delete existing nodes and connections (cascade deletes connections)
         await tx.node.deleteMany({
           where: { workflowId: id },
@@ -111,14 +135,26 @@ export const workflowsRouter = createTRPCRouter({
 
         // Create nodes
         await tx.node.createMany({
-          data: nodes.map((node) => ({
-            id: node.id,
-            workflowId: id,
-            name: node.type || "unknown",
-            type: node.type as NodeType,
-            position: node.position,
-            data: node.data || {},
-          })),
+          data: nodes.map((node) => {
+            const data = { ...(node.data || {}) };
+
+            if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
+              delete data.secret;
+              const existingSecret = googleFormSecrets.get(node.id);
+              if (existingSecret) {
+                data.secret = existingSecret;
+              }
+            }
+
+            return {
+              id: node.id,
+              workflowId: id,
+              name: node.type || "unknown",
+              type: node.type as NodeType,
+              position: node.position,
+              data,
+            };
+          }),
         });
 
         // Create connections
@@ -140,6 +176,84 @@ export const workflowsRouter = createTRPCRouter({
 
         return workflow;
       });
+    }),
+  generateGoogleFormSecret: protectedProcedure
+    .input(
+      z.object({
+        workflowId: z.string(),
+        nodeId: z.string(),
+        rotate: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const node = await prisma.node.findFirst({
+        where: {
+          id: input.nodeId,
+          workflowId: input.workflowId,
+          type: NodeType.GOOGLE_FORM_TRIGGER,
+          workflow: { userId: ctx.auth.user.id },
+        },
+      });
+
+      if (!node) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Save the Google Form Trigger before configuring it",
+        });
+      }
+
+      const nodeData =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+      const existingSecret = nodeData.secret;
+
+      if (typeof existingSecret === "string" && !input.rotate) {
+        return { secret: existingSecret };
+      }
+
+      const secret = randomUUID();
+      if (input.rotate) {
+        await prisma.node.update({
+          where: { id: node.id },
+          data: { data: { ...nodeData, secret } },
+        });
+        return { secret };
+      }
+
+      await prisma.$executeRaw`
+        UPDATE "Node"
+        SET "data" = jsonb_set(
+          COALESCE("data", '{}'::jsonb),
+          '{secret}',
+          ${JSON.stringify(secret)}::jsonb
+        )
+        WHERE "id" = ${node.id}
+          AND (
+            "data"->>'secret' IS NULL
+            OR "data"->>'secret' = ''
+          )
+      `;
+
+      const updatedNode = await prisma.node.findUnique({
+        where: { id: node.id },
+        select: { data: true },
+      });
+      const updatedData =
+        updatedNode?.data &&
+        typeof updatedNode.data === "object" &&
+        !Array.isArray(updatedNode.data)
+          ? (updatedNode.data as Record<string, unknown>)
+          : {};
+
+      if (typeof updatedData.secret !== "string") {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate webhook secret",
+        });
+      }
+
+      return { secret: updatedData.secret };
     }),
   execute: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -167,12 +281,25 @@ export const workflowsRouter = createTRPCRouter({
           type: string;
           position: unknown;
           data: unknown;
-        }) => ({
-          id: node.id,
-          type: node.type,
-          position: node.position as { x: number; y: number },
-          data: (node.data as Record<string, unknown>) || {},
-        }),
+        }) => {
+          const data =
+            node.data &&
+            typeof node.data === "object" &&
+            !Array.isArray(node.data)
+              ? { ...(node.data as Record<string, unknown>) }
+              : {};
+
+          if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
+            delete data.secret;
+          }
+
+          return {
+            id: node.id,
+            type: node.type,
+            position: node.position as { x: number; y: number },
+            data,
+          };
+        },
       );
 
       // Transform server connections to react-flow compatible edges

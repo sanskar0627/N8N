@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { NodeType } from "@/generated/prisma";
+import { NodeType } from "@/generated/prisma/enums";
 import { Separator } from "./ui/separator";
 import {
   Sheet,

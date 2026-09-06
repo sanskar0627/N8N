@@ -1,6 +1,6 @@
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import type { WorkflowContext } from "@/features/executions/types";
-import { NodeType } from "@/generated/prisma";
+import { NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
 
 const TRIGGER_NODE_TYPES: NodeType[] = [
