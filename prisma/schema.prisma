@@ -110,6 +110,8 @@ enum CredentialType {
   OPENROUTER
   ANTHROPIC
   GEMINI
+  DISCORD
+  SLACK
 }
 
 model Credential {

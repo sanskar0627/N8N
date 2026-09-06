@@ -4,6 +4,8 @@ export const CREDENTIAL_TYPES = [
   CredentialType.OPENROUTER,
   CredentialType.ANTHROPIC,
   CredentialType.GEMINI,
+  CredentialType.DISCORD,
+  CredentialType.SLACK,
 ] as const;
 
 export const CREDENTIAL_CONFIG = {
@@ -25,6 +27,18 @@ export const CREDENTIAL_CONFIG = {
     placeholder: "AIza...",
     icon: "/logos/gemini.svg",
   },
+  [CredentialType.DISCORD]: {
+    label: "Discord",
+    description: "Webhook URL used by Discord nodes",
+    placeholder: "https://discord.com/api/webhooks/...",
+    icon: "/logos/discord.svg",
+  },
+  [CredentialType.SLACK]: {
+    label: "Slack",
+    description: "Webhook URL used by Slack nodes",
+    placeholder: "https://hooks.slack.com/services/...",
+    icon: "/logos/slack.svg",
+  },
 } as const;
 
 export const AI_NODE_CREDENTIAL_TYPES = {
@@ -33,7 +47,25 @@ export const AI_NODE_CREDENTIAL_TYPES = {
   [NodeType.GEMINI]: CredentialType.GEMINI,
 } as const;
 
+export const WEBHOOK_NODE_CREDENTIAL_TYPES = {
+  [NodeType.DISCORD]: CredentialType.DISCORD,
+  [NodeType.SLACK]: CredentialType.SLACK,
+} as const;
+
+export const NODE_CREDENTIAL_TYPES = {
+  ...AI_NODE_CREDENTIAL_TYPES,
+  ...WEBHOOK_NODE_CREDENTIAL_TYPES,
+} as const;
+
 export type SupportedCredentialType = (typeof CREDENTIAL_TYPES)[number];
+export type CredentialNodeType = keyof typeof NODE_CREDENTIAL_TYPES;
+
+export const isCredentialNodeType = (
+  value: string,
+): value is CredentialNodeType => Object.hasOwn(NODE_CREDENTIAL_TYPES, value);
+
+export const getCredentialTypeForNode = (nodeType: CredentialNodeType) =>
+  NODE_CREDENTIAL_TYPES[nodeType];
 
 export const getCredentialTypeForAiNode = (
   nodeType: keyof typeof AI_NODE_CREDENTIAL_TYPES,

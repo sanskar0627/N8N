@@ -1,12 +1,12 @@
-import {
-  type AiNodeType,
-  isAiNodeType,
-} from "@/features/executions/components/ai-node/config";
 import type { CredentialType } from "@/generated/prisma/enums";
-import { getCredentialTypeForAiNode } from "../config";
+import {
+  type CredentialNodeType,
+  getCredentialTypeForNode,
+  isCredentialNodeType,
+} from "../config";
 
-export type AiCredentialRef = {
-  nodeType: AiNodeType;
+export type NodeCredentialRef = {
+  nodeType: CredentialNodeType;
   credentialId: string;
 };
 
@@ -15,13 +15,13 @@ type NodeLike = {
   data?: Record<string, unknown>;
 };
 
-export const collectAiCredentialRefs = (
+export const collectNodeCredentialRefs = (
   nodes: NodeLike[],
-): AiCredentialRef[] => {
-  const refs: AiCredentialRef[] = [];
+): NodeCredentialRef[] => {
+  const refs: NodeCredentialRef[] = [];
 
   for (const node of nodes) {
-    if (!node.type || !isAiNodeType(node.type)) {
+    if (!node.type || !isCredentialNodeType(node.type)) {
       continue;
     }
 
@@ -39,8 +39,8 @@ export const collectAiCredentialRefs = (
   return refs;
 };
 
-export const findInvalidAiCredentialRef = (
-  refs: AiCredentialRef[],
+export const findInvalidNodeCredentialRef = (
+  refs: NodeCredentialRef[],
   credentials: Array<{ id: string; type: CredentialType }>,
 ) => {
   const byId = new Map(
@@ -53,10 +53,13 @@ export const findInvalidAiCredentialRef = (
       return "Selected credential was not found";
     }
 
-    if (credential.type !== getCredentialTypeForAiNode(ref.nodeType)) {
-      return "Credential type does not match this AI node";
+    if (credential.type !== getCredentialTypeForNode(ref.nodeType)) {
+      return "Credential type does not match this node";
     }
   }
 
   return null;
 };
+
+export const collectAiCredentialRefs = collectNodeCredentialRefs;
+export const findInvalidAiCredentialRef = findInvalidNodeCredentialRef;

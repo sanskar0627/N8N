@@ -9,6 +9,10 @@ import {
 import prisma from "@/lib/db";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { storeCredentialValue } from "../lib/credential-value";
+import {
+  isAllowedWebhookUrl,
+  isWebhookCredentialType,
+} from "../lib/webhook-url";
 
 const credentialPublicSelect = {
   id: true,
@@ -38,13 +42,27 @@ export const credentialsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const existing = await prisma.credential.findFirst({
         where: { id: input.id, userId: ctx.auth.user.id },
-        select: { id: true },
+        select: { id: true, type: true },
       });
 
       if (!existing) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Credential not found",
+        });
+      }
+
+      if (
+        input.value &&
+        isWebhookCredentialType(existing.type) &&
+        !isAllowedWebhookUrl(input.value, existing.type)
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            existing.type === "DISCORD"
+              ? "Enter a valid Discord webhook URL"
+              : "Enter a valid Slack webhook URL",
         });
       }
 
