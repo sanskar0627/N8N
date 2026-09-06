@@ -7,6 +7,7 @@ import type React from "react";
 import {
   EmptyView,
   EntityContainer,
+  EntityCreateButton,
   EntityHeader,
   EntityItem,
   EntityList,
@@ -54,7 +55,14 @@ export const WorkflowsList = () => {
   );
 };
 
-export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
+export const WorkflowsHeader = () => (
+  <EntityHeader
+    title="Workflows"
+    description="Create and manage your workflows"
+  />
+);
+
+export const WorkflowsCreateButton = ({ disabled }: { disabled?: boolean }) => {
   const createWorkflow = useCreateWorkflow();
   const router = useRouter();
   const { handleError, modal } = useUpgradeModal();
@@ -73,11 +81,9 @@ export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
   return (
     <>
       {modal}
-      <EntityHeader
-        title="Workflows"
-        description="Create and manage your workflows"
-        onNew={handleCreate}
-        newButtonLabel="New workflow"
+      <EntityCreateButton
+        label="New workflow"
+        onClick={handleCreate}
         disabled={disabled}
         isCreating={createWorkflow.isPending}
       />
@@ -128,7 +134,9 @@ export const WorkflowsEmpty = () => {
       {modal}
       <EmptyView
         onNew={handleCreate}
-        message="You haven't created any workflows yet. Get started by creating your first workflow"
+        title="No workflows yet"
+        actionLabel="Create workflow"
+        message="Build your first automation and connect triggers, AI, and apps on the canvas."
       />
     </>
   );
@@ -152,11 +160,7 @@ export const WorkflowItem = ({ data }: { data: Workflow }) => {
           {formatDistanceToNow(data.createdAt, { addSuffix: true })}
         </>
       }
-      image={
-        <div className="size-8 flex items-center justify-center">
-          <WorkflowIcon className="size-5 text-muted-foreground" />
-        </div>
-      }
+      image={<WorkflowIcon className="size-4" />}
       onRemove={handleRemove}
       isRemoving={removeWorkflow.isPending}
     />
@@ -172,6 +176,7 @@ export const WorkflowsContainer = ({
     <EntityContainer
       header={<WorkflowsHeader />}
       search={<WorkflowsSearch />}
+      action={<WorkflowsCreateButton />}
       pagination={<WorkflowsPagination />}
     >
       {children}

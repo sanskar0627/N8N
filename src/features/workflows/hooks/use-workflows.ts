@@ -32,6 +32,7 @@ export const useCreateWorkflow = () => {
         queryClient.invalidateQueries(trpc.workflows.getMany.queryOptions({}));
       },
       onError: (error) => {
+        if (error.data?.code === "FORBIDDEN") return;
         toast.error(`Failed to create workflow: ${error.message}`);
       },
     }),

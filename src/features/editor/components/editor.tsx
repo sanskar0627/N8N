@@ -84,7 +84,7 @@ export const Editor = ({ workflowId }: { workflowId: string }) => {
         snapGrid={snapGrid}
         fitView
       >
-        <Background />
+        <Background gap={22} size={1.4} color="#c8cdd6" />
         <Controls />
         <MiniMap />
         <Panel position="top-right">

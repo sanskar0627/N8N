@@ -39,13 +39,13 @@ import { EXECUTION_STATUS_FILTERS } from "../params";
 const getStatusIcon = (status: ExecutionStatus) => {
   switch (status) {
     case "SUCCESS":
-      return <CheckCircle2Icon className="size-5 text-green-600" />;
+      return <CheckCircle2Icon className="size-4 text-emerald-600" />;
     case "FAILED":
-      return <XCircleIcon className="size-5 text-red-600" />;
+      return <XCircleIcon className="size-4 text-red-600" />;
     case "RUNNING":
-      return <Loader2Icon className="size-5 animate-spin text-blue-600" />;
+      return <Loader2Icon className="size-4 animate-spin text-sky-600" />;
     default:
-      return <ClockIcon className="size-5 text-muted-foreground" />;
+      return <ClockIcon className="size-4 text-muted-foreground" />;
   }
 };
 
@@ -109,7 +109,6 @@ export const ExecutionsHeader = () => (
   <EntityHeader
     title="Executions"
     description="Review recent workflow runs, errors, and outputs"
-    newButtonLabel="New execution"
   />
 );
 
@@ -141,7 +140,9 @@ export const ExecutionsEmpty = () => {
   return (
     <EmptyView
       onNew={() => router.push("/workflows")}
-      message="Run a workflow to see its history here."
+      title="No executions yet"
+      actionLabel="Open workflows"
+      message="Run a workflow from the editor to see status, duration, and output here."
     />
   );
 };
@@ -174,11 +175,7 @@ const ExecutionItem = ({ data }: { data: ExecutionListItem }) => {
       href={`/executions/${data.id}`}
       title={formatExecutionStatus(data.status)}
       subtitle={subtitle}
-      image={
-        <div className="flex size-9 shrink-0 items-center justify-center">
-          {getStatusIcon(data.status)}
-        </div>
-      }
+      image={getStatusIcon(data.status)}
     />
   );
 };

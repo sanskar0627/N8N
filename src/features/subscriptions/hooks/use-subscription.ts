@@ -5,9 +5,13 @@ export const useSubscription = () => {
   return useQuery({
     queryKey: ["subscription"],
     queryFn: async () => {
-      const { data } = await authClient.customer.state();
-      return data;
+      const { data, error } = await authClient.customer.state();
+      if (error) return null;
+      return data ?? null;
     },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 

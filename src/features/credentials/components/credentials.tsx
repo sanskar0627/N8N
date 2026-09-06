@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   EmptyView,
   EntityContainer,
+  EntityCreateButton,
   EntityHeader,
   EntityItem,
   EntityList,
@@ -56,8 +57,6 @@ export const CredentialsHeader = () => (
   <EntityHeader
     title="Credentials"
     description="Manage reusable connections for workflow nodes"
-    newButtonHref="/credentials/new"
-    newButtonLabel="New credential"
   />
 );
 
@@ -88,7 +87,9 @@ export const CredentialsEmpty = () => {
   return (
     <EmptyView
       onNew={() => router.push("/credentials/new")}
-      message="Create a credential once, then reuse it across your AI nodes."
+      title="No credentials yet"
+      actionLabel="New credential"
+      message="Save an API key once, then reuse it across OpenAI, Anthropic, Gemini, Discord, and Slack nodes."
     />
   );
 };
@@ -116,15 +117,13 @@ const CredentialItem = ({ data }: { data: PublicCredential }) => {
         },
       )}`}
       image={
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-          <Image
-            src={config.icon}
-            alt=""
-            width={20}
-            height={20}
-            className="size-5 object-contain"
-          />
-        </div>
+        <Image
+          src={config.icon}
+          alt=""
+          width={18}
+          height={18}
+          className="size-[18px] object-contain"
+        />
       }
       onRemove={handleRemove}
       isRemoving={removeCredential.isPending}
@@ -140,6 +139,9 @@ export const CredentialsContainer = ({
   <EntityContainer
     header={<CredentialsHeader />}
     search={<CredentialsSearch />}
+    action={
+      <EntityCreateButton label="New credential" href="/credentials/new" />
+    }
     pagination={<CredentialsPagination />}
   >
     {children}

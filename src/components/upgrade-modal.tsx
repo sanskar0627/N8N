@@ -10,37 +10,39 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { authClient } from "@/lib/auth-client";
+import { useBillingCheckout } from "@/features/subscriptions/hooks/use-billing";
 
 interface UpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-};
+}
 
-export const UpgradeModal = ({
-  open,
-  onOpenChange
-}: UpgradeModalProps) => {
+export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
+  const billingCheckout = useBillingCheckout();
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Upgrade to Pro</AlertDialogTitle>
           <AlertDialogDescription>
-            You need an active subscription to perform this
-            action. Upgrade to
-            Pro to unlock all features.
+            Free accounts can keep a few workflows. Upgrade to Pro in the Polar
+            sandbox to create more.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => authClient.checkout({ slug: "pro" })}
+            disabled={billingCheckout.isPending}
+            onClick={(event) => {
+              event.preventDefault();
+              billingCheckout.mutate();
+            }}
           >
-            Upgrade Now
+            {billingCheckout.isPending ? "Opening checkout..." : "Upgrade Now"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 };

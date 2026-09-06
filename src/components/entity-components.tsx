@@ -1,8 +1,22 @@
-import { AlertTriangleIcon, Loader2Icon, MoreVerticalIcon, PackageOpenIcon, PlusIcon, SearchIcon, TrashIcon } from "lucide-react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import {
+  AlertTriangleIcon,
+  Loader2Icon,
+  MoreVerticalIcon,
+  PlusIcon,
+  SearchIcon,
+  TrashIcon,
+  WorkflowIcon,
+} from "lucide-react";
 import Link from "next/link";
-import React from "react";
+import type React from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -11,71 +25,19 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "./ui/empty";
-import { cn } from "@/lib/utils";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
-} from "./ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Input } from "./ui/input";
 
 type EntityHeaderProps = {
   title: string;
   description?: string;
-  newButtonLabel: string;
-  disabled?: boolean;
-  isCreating?: boolean;
-} & (
-  | { onNew: () => void; newButtonHref?: never }
-  | { newButtonHref: string; onNew?: never }
-  | { onNew?: never; newButtonHref?: never }
-);
+};
 
-export const EntityHeader = ({
-  title,
-  description,
-  onNew,
-  newButtonHref,
-  newButtonLabel,
-  disabled,
-  isCreating,
-}: EntityHeaderProps) => {
+export const EntityHeader = ({ title, description }: EntityHeaderProps) => {
   return (
-    <div className="flex flex-row items-center justify-between gap-x-4">
-      <div className="flex flex-col">
-        <h1 className="text-lg md:text-xl font-semibold">{title}</h1>
-        {description && (
-          <p className="text-xs md:text-sm text-muted-foreground">
-            {description}
-          </p>
-        )}
-      </div>
-      {onNew && !newButtonHref && (
-        <Button
-          size="sm"
-          disabled={disabled || isCreating}
-          onClick={onNew}
-        >
-          <PlusIcon className="size-4" />
-          {newButtonLabel}
-        </Button>
-      )}
-      {newButtonHref && !onNew && (
-        <Button
-          size="sm"
-          asChild
-        >
-          <Link href={newButtonHref} prefetch>
-            <PlusIcon className="size-4" />
-            {newButtonLabel}
-          </Link>
-        </Button>
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+      {description && (
+        <p className="text-sm text-muted-foreground">{description}</p>
       )}
     </div>
   );
@@ -86,6 +48,7 @@ type EntityContainerProps = {
   header?: React.ReactNode;
   search?: React.ReactNode;
   pagination?: React.ReactNode;
+  action?: React.ReactNode;
 };
 
 export const EntityContainer = ({
@@ -93,27 +56,34 @@ export const EntityContainer = ({
   header,
   search,
   pagination,
+  action,
 }: EntityContainerProps) => {
   return (
-    <div className="p-4 md:px-10 md:py-6 h-full">
-      <div className="mx-auto max-w-screen-xl w-full flex flex-col gap-y-8 h-full">
-        {header}
-
-        <div className="flex flex-col gap-y-4 h-full">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-col gap-3 border-b bg-background px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+        <div className="min-w-0">{header}</div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
           {search}
-          {children}
+          {action}
         </div>
-        {pagination}
       </div>
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-5">
+        <div className="mx-auto flex h-full max-w-6xl flex-col">{children}</div>
+      </div>
+      {pagination && (
+        <div className="border-t bg-background px-4 py-2.5 md:px-6">
+          <div className="mx-auto max-w-6xl">{pagination}</div>
+        </div>
+      )}
     </div>
-  )
+  );
 };
 
 interface EntitySearchProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-};
+}
 
 export const EntitySearch = ({
   value,
@@ -121,47 +91,39 @@ export const EntitySearch = ({
   placeholder = "Search",
 }: EntitySearchProps) => {
   return (
-    <div className="relative ml-auto">
-      <SearchIcon className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+    <div className="relative w-full md:w-[240px]">
+      <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
-        className="max-w-[200px] bg-background shadow-none border-border pl-8"
+        className="h-8 bg-background pr-3 pl-8 text-sm shadow-none"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
-  )
+  );
 };
 
 interface StateViewProps {
   message?: string;
-};
+}
 
-export const LoadingView = ({
-  message,
-}: StateViewProps) => {
+export const LoadingView = ({ message }: StateViewProps) => {
   return (
-    <div className="flex justify-center items-center h-full flex-1 flex-col gap-y-4">
-      <Loader2Icon className="size-6 animate-spin text-primary" />
+    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+      <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
       {!!message && (
-        <p className="text-sm text-muted-foreground">
-          {message}
-        </p>
+        <p className="text-sm text-muted-foreground">{message}</p>
       )}
     </div>
   );
 };
 
-export const ErrorView = ({
-  message,
-}: StateViewProps) => {
+export const ErrorView = ({ message }: StateViewProps) => {
   return (
-    <div className="flex justify-center items-center h-full flex-1 flex-col gap-y-4">
-      <AlertTriangleIcon className="size-6 animate-spin text-primary" />
+    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+      <AlertTriangleIcon className="size-5 text-destructive" />
       {!!message && (
-        <p className="text-sm text-muted-foreground">
-          {message}
-        </p>
+        <p className="text-sm text-muted-foreground">{message}</p>
       )}
     </div>
   );
@@ -172,7 +134,7 @@ interface EntityPaginationProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   disabled?: boolean;
-};
+}
 
 export const EntityPagination = ({
   page,
@@ -181,15 +143,16 @@ export const EntityPagination = ({
   disabled,
 }: EntityPaginationProps) => {
   return (
-    <div className="flex items-center justify-between gap-x-2 w-full">
-      <div className="flex-1 text-sm text-muted-foreground">
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-xs text-muted-foreground">
         Page {page} of {totalPages || 1}
-      </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
+      </p>
+      <div className="flex items-center gap-2">
         <Button
           disabled={page === 1 || disabled}
           variant="outline"
           size="sm"
+          className="h-7 px-2.5 text-xs"
           onClick={() => onPageChange(Math.max(1, page - 1))}
         >
           Previous
@@ -198,42 +161,42 @@ export const EntityPagination = ({
           disabled={page === totalPages || totalPages === 0 || disabled}
           variant="outline"
           size="sm"
+          className="h-7 px-2.5 text-xs"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
         >
           Next
         </Button>
       </div>
     </div>
-  )
+  );
 };
 
 interface EmptyViewProps extends StateViewProps {
   onNew?: () => void;
-};
+  title?: string;
+  actionLabel?: string;
+}
 
 export const EmptyView = ({
   message,
   onNew,
+  title = "Nothing here yet",
+  actionLabel = "Create workflow",
 }: EmptyViewProps) => {
   return (
-    <Empty className="border border-dashed bg-white">
+    <Empty className="min-h-[360px] rounded-lg border bg-background">
       <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <PackageOpenIcon />
+        <EmptyMedia variant="icon" className="size-12 rounded-xl bg-primary/10 text-primary">
+          <WorkflowIcon className="size-6" />
         </EmptyMedia>
+        <EmptyTitle className="text-base">{title}</EmptyTitle>
+        {!!message && <EmptyDescription>{message}</EmptyDescription>}
       </EmptyHeader>
-      <EmptyTitle>
-        No items
-      </EmptyTitle>
-      {!!message && (
-        <EmptyDescription>
-          {message}
-        </EmptyDescription>
-      )}
       {!!onNew && (
         <EmptyContent>
-          <Button onClick={onNew}>
-            Add item
+          <Button size="sm" onClick={onNew}>
+            <PlusIcon className="size-4" />
+            {actionLabel}
           </Button>
         </EmptyContent>
       )}
@@ -241,14 +204,13 @@ export const EmptyView = ({
   );
 };
 
-
 interface EntityListProps<T> {
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
   getKey?: (item: T, index: number) => string | number;
   emptyView?: React.ReactNode;
   className?: string;
-};
+}
 
 export function EntityList<T>({
   items,
@@ -259,25 +221,30 @@ export function EntityList<T>({
 }: EntityListProps<T>) {
   if (items.length === 0 && emptyView) {
     return (
-      <div className="flex-1 flex justify-center items-center">
-        <div className="max-w-sm mx-auto">{emptyView}</div>
+      <div className="flex flex-1 items-center justify-center py-6">
+        {emptyView}
       </div>
     );
   }
 
   return (
-    <div className={cn(
-      "flex flex-col gap-y-4",
-      className,
-    )}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-lg border bg-background",
+        className,
+      )}
+    >
       {items.map((item, index) => (
-        <div key={getKey ? getKey(item, index) : index}>
+        <div
+          key={getKey ? getKey(item, index) : index}
+          className="border-b last:border-b-0"
+        >
           {renderItem(item, index)}
         </div>
       ))}
     </div>
   );
-};
+}
 
 interface EntityItemProps {
   href: string;
@@ -288,7 +255,7 @@ interface EntityItemProps {
   onRemove?: () => void | Promise<void>;
   isRemoving?: boolean;
   className?: string;
-};
+}
 
 export const EntityItem = ({
   href,
@@ -310,53 +277,93 @@ export const EntityItem = ({
   };
 
   return (
-    <Link href={href} prefetch>
-      <Card className={cn(
-        "transition hover:shadow-md",
-        isRemoving && "opacity-50 cursor-not-allowed",
+    <Link
+      href={href}
+      prefetch
+      className={cn(
+        "group flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/60",
+        isRemoving && "pointer-events-none opacity-50",
         className,
-      )}>
-        <CardContent className="flex flex-row items-center justify-between p-0">
-          <div className="flex items-center gap-x-4 p-4 overflow-hidden">
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        {image && (
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
             {image}
-            <div className="flex flex-col overflow-hidden">
-              <CardTitle className="text-base font-medium truncate">
-                {title}
-              </CardTitle>
-              {subtitle && (
-                <CardDescription className="text-xs truncate">
-                  {subtitle}
-                </CardDescription>
-              )}
-            </div>
           </div>
-          {(actions || onRemove) && (
-            <div className="flex items-center gap-x-2 pr-4">
-              {actions}
-              {onRemove && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      <MoreVerticalIcon className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleRemove}>
-                      <TrashIcon className="size-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{title}</p>
+          {subtitle && (
+            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+      {(actions || onRemove) && (
+        <div className="flex shrink-0 items-center gap-1">
+          {actions}
+          {onRemove && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 opacity-0 group-hover:opacity-100"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  <MoreVerticalIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={handleRemove}
+                >
+                  <TrashIcon className="size-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      )}
     </Link>
+  );
+};
+
+export const EntityCreateButton = ({
+  label,
+  onClick,
+  href,
+  disabled,
+  isCreating,
+}: {
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  disabled?: boolean;
+  isCreating?: boolean;
+}) => {
+  if (href) {
+    return (
+      <Button size="sm" className="h-8" asChild>
+        <Link href={href} prefetch>
+          <PlusIcon className="size-4" />
+          {label}
+        </Link>
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      size="sm"
+      className="h-8"
+      disabled={disabled || isCreating}
+      onClick={onClick}
+    >
+      <PlusIcon className="size-4" />
+      {label}
+    </Button>
   );
 };
