@@ -18,6 +18,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   workflows     Workflow[]
+  credentials   Credential[]
 
   @@unique([email])
   @@map("user")
@@ -103,6 +104,27 @@ enum ExecutionStatus {
   RUNNING
   SUCCESS
   FAILED
+}
+
+enum CredentialType {
+  OPENROUTER
+  ANTHROPIC
+  GEMINI
+}
+
+model Credential {
+  id        String         @id @default(cuid())
+  name      String
+  type      CredentialType
+  value     String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([userId, updatedAt(sort: Desc)])
 }
 
 model Node {

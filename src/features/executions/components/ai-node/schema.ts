@@ -3,7 +3,7 @@ import { variableNameSchema } from "@/features/executions/lib/variable-name";
 
 export const aiNodeFormSchema = z.object({
   variableName: variableNameSchema,
-  apiKey: z.string().max(2_000).optional(),
+  credentialId: z.string().min(1, "Credential is required"),
   model: z.string().trim().min(1, "Model is required").max(300),
   systemPrompt: z.string().max(50_000).optional(),
   userPrompt: z
@@ -14,4 +14,4 @@ export const aiNodeFormSchema = z.object({
 
 export type AiNodeFormValues = z.infer<typeof aiNodeFormSchema>;
 
-export type AiNodeData = Omit<AiNodeFormValues, "apiKey">;
+export type AiNodeData = AiNodeFormValues;

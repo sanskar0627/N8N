@@ -27,20 +27,21 @@ test("defines the executor-compatible AI provider contracts", () => {
   assert.equal(AI_NODE_CONFIG.GEMINI.outputField, "geminiResponse");
 });
 
-test("validates AI node fields without requiring a replacement key", () => {
+test("requires a saved credential for AI nodes", () => {
   const result = aiNodeFormSchema.parse({
     variableName: "summary",
+    credentialId: "cred_123",
     model: "provider/model",
     systemPrompt: "Use {{customer.preferences}}",
     userPrompt: "Summarize {{json order.items}}",
   });
 
-  assert.equal(result.apiKey, undefined);
+  assert.equal(result.credentialId, "cred_123");
   assert.equal(
     aiNodeFormSchema.safeParse({
-      variableName: "invalid name",
-      model: "",
-      userPrompt: "",
+      variableName: "summary",
+      model: "provider/model",
+      userPrompt: "Summarize this",
     }).success,
     false,
   );

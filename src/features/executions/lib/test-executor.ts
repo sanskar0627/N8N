@@ -1,3 +1,4 @@
+import { hydrateAiNodeData } from "@/features/credentials/lib/hydrate-ai-node-data";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import type { WorkflowContext } from "@/features/executions/types";
 import { NodeType } from "@/generated/prisma/enums";
@@ -93,12 +94,18 @@ export async function executeNodeForTest(
     const publish = createMockPublish() as unknown as Parameters<
       typeof executor
     >[0]["publish"];
+    const data =
+      node.data && typeof node.data === "object" && !Array.isArray(node.data)
+        ? (node.data as Record<string, unknown>)
+        : {};
+    const nodeData = await hydrateAiNodeData({
+      nodeType: node.type,
+      data,
+      userId,
+    });
 
     const result = await executor({
-      data:
-        node.data && typeof node.data === "object" && !Array.isArray(node.data)
-          ? (node.data as Record<string, unknown>)
-          : {},
+      data: nodeData,
       nodeId: node.id,
       workflowId,
       userId,
