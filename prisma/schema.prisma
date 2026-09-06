@@ -88,6 +88,15 @@ model Workflow {
 
 enum NodeType {
   INITIAL
+  MANUAL_TRIGGER
+  HTTP_REQUEST
+  OPENAI
+  ANTHROPIC
+  GEMINI
+  DISCORD
+  SLACK
+  GOOGLE_FORM_TRIGGER
+  STRIPE_TRIGGER
 }
 
 model Node {

@@ -13,20 +13,57 @@ import {
 import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useAtomValue } from "jotai";
+import { toast } from "sonner";
 import {
   useSuspenseWorkflow,
   useUpdateWorkflowName,
+  useUpdateWorkflow,
 } from "@/features/workflows/hooks/use-workflows";
+import { editorAtom } from "@/features/editor/store/atoms";
 
 export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
+  const editor = useAtomValue(editorAtom);
+  const updateWorkflow = useUpdateWorkflow();
+
+  const handleSave = () => {
+    if (!editor) return;
+
+    const nodes = editor.getNodes().map((node) => ({
+      id: node.id,
+      type: node.type,
+      position: node.position,
+      data: node.data,
+    }));
+
+    const edges = editor.getEdges().map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }));
+
+    updateWorkflow.mutate(
+      { id: workflowId, nodes, edges },
+      {
+        onSuccess: () => {
+          toast.success("Workflow saved");
+        },
+        onError: () => {
+          toast.error("Failed to save workflow");
+        },
+      }
+    );
+  };
+
   return (
     <div className="ml-auto">
-      <Button size="sm" onClick={() => {}} disabled={false}>
+      <Button size="sm" onClick={handleSave} disabled={updateWorkflow.isPending || !editor}>
         <SaveIcon className="size-4" />
         Save
       </Button>
     </div>
-  )
+  );
 };
 
 export const EditorNameInput = ({ workflowId }: { workflowId: string }) => {
@@ -89,14 +126,14 @@ export const EditorNameInput = ({ workflowId }: { workflowId: string }) => {
         onKeyDown={handleKeyDown}
         className="h-7 w-auto min-w-[100px] px-2"
       />
-    )
+    );
   }
 
   return (
     <BreadcrumbItem className="cursor-pointer hover:text-foreground transition-colors" onClick={() => setIsEditing(true)}>
       {workflow.name}
     </BreadcrumbItem>
-  )
+  );
 };
 
 export const EditorBreadcrumbs = ({ workflowId }: { workflowId: string }) => {
@@ -114,7 +151,7 @@ export const EditorBreadcrumbs = ({ workflowId }: { workflowId: string }) => {
         <EditorNameInput workflowId={workflowId} />
       </BreadcrumbList>
     </Breadcrumb>
-  )
+  );
 };
 
 export const EditorHeader = ({ workflowId }: { workflowId: string }) => {
