@@ -5,7 +5,7 @@ export const useSubscription = () => {
   const trpc = useTRPC();
 
   return useQuery(
-    trpc.billing.customerState.queryOptions({
+    trpc.billing.customerState.queryOptions(undefined, {
       retry: false,
       staleTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,

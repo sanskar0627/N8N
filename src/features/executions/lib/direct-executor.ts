@@ -73,7 +73,7 @@ export const executeWorkflowDirect = async (workflowId: string) => {
           data: {
             status: ExecutionStatus.FAILED,
             completedAt: new Date(),
-            output: redactExecutionOutput(context) as typeof context,
+            output: redactExecutionOutput(context) as any,
             error: error instanceof Error ? error.message : "Node execution failed",
             errorStack: error instanceof Error ? error.stack : undefined,
           },
@@ -90,7 +90,7 @@ export const executeWorkflowDirect = async (workflowId: string) => {
       data: {
         status: ExecutionStatus.SUCCESS,
         completedAt: new Date(),
-        output: redactExecutionOutput(context) as typeof context,
+        output: redactExecutionOutput(context) as any,
       },
     });
 

@@ -195,7 +195,7 @@ export const workflowsRouter = createTRPCRouter({
           where: { workflowId: id },
           select: { id: true, type: true, data: true },
         });
-        const privateNodeTypes = new Set([
+        const privateNodeTypes = new Set<NodeType>([
           NodeType.GOOGLE_FORM_TRIGGER,
           NodeType.STRIPE_TRIGGER,
           ...AI_NODE_TYPES,
