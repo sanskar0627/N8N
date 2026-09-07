@@ -7,6 +7,7 @@ import {
   WEBHOOK_NODE_CREDENTIAL_TYPES,
 } from "../config";
 import { readCredentialValue } from "./credential-value";
+import { readNodeSecret } from "./node-secret";
 import { isAllowedWebhookUrl, isWebhookCredentialType } from "./webhook-url";
 
 type CredentialLookup = (input: {
@@ -48,7 +49,10 @@ export const hydrateNodeData = async (
   const secretField = secretFieldForNode(nodeType);
   const existingSecret = data[secretField];
   if (typeof existingSecret === "string" && existingSecret.length > 0) {
-    return data;
+    return {
+      ...data,
+      [secretField]: readNodeSecret(existingSecret),
+    };
   }
 
   if (typeof data.credentialId !== "string" || data.credentialId.length === 0) {
