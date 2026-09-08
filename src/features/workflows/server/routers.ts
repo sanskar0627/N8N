@@ -689,6 +689,8 @@ export const workflowsRouter = createTRPCRouter({
         workflowId: z.string(),
         nodeId: z.string(),
         mockContext: z.record(z.string(), z.any()).optional(),
+        nodeType: z.string().optional(),
+        nodeData: z.record(z.string(), z.any()).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -697,6 +699,8 @@ export const workflowsRouter = createTRPCRouter({
         nodeId: input.nodeId,
         userId: ctx.auth.user.id,
         mockContext: input.mockContext,
+        nodeType: input.nodeType,
+        nodeData: input.nodeData,
       });
 
       if (!result.success) {

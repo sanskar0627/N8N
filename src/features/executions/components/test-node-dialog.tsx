@@ -32,6 +32,7 @@ interface TestNodeDialogProps {
   onOpenChange: (open: boolean) => void;
   workflowId: string;
   nodeId: string;
+  nodeType?: string;
   nodeData: Record<string, unknown>;
   nodeName: string;
 }
@@ -58,6 +59,7 @@ export const TestNodeDialog = ({
   onOpenChange,
   workflowId,
   nodeId,
+  nodeType,
   nodeData,
   nodeName,
 }: TestNodeDialogProps) => {
@@ -96,7 +98,7 @@ export const TestNodeDialog = ({
     setCopied(false);
 
     executeNode.mutate(
-      { workflowId, nodeId, mockContext },
+      { workflowId, nodeId, mockContext, nodeType, nodeData },
       {
         onSuccess: (data) => {
           setExecutionResult({

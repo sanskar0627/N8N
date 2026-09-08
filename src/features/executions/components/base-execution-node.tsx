@@ -28,6 +28,7 @@ interface BaseExecutionNodeProps extends NodeProps {
 export const BaseExecutionNode = memo(
   ({
     id,
+    type,
     icon: Icon,
     name,
     description,
@@ -65,6 +66,7 @@ export const BaseExecutionNode = memo(
             onOpenChange={setTestDialogOpen}
             workflowId={workflowId}
             nodeId={id}
+            nodeType={type}
             nodeData={nodeData}
             nodeName={name}
           />

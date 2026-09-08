@@ -46,6 +46,8 @@ interface TestNodeParams {
   nodeId: string;
   userId: string;
   mockContext?: Record<string, unknown>;
+  nodeType?: string;
+  nodeData?: Record<string, unknown>;
 }
 
 interface TestNodeResult {
@@ -57,7 +59,7 @@ interface TestNodeResult {
 export async function executeNodeForTest(
   params: TestNodeParams,
 ): Promise<TestNodeResult> {
-  const { workflowId, nodeId, userId, mockContext = {} } = params;
+  const { workflowId, nodeId, userId, mockContext = {}, nodeType, nodeData: providedNodeData } = params;
 
   try {
     const node = await prisma.node.findFirst({
@@ -67,39 +69,55 @@ export async function executeNodeForTest(
       },
     });
 
-    if (!node) {
-      return { success: false, error: "Node not found" };
+    let resolvedType: NodeType;
+    let resolvedData: Record<string, unknown>;
+
+    if (node) {
+      if (node.workflow.userId !== userId) {
+        return { success: false, error: "Unauthorized" };
+      }
+      resolvedType = node.type;
+      resolvedData =
+        node.data && typeof node.data === "object" && !Array.isArray(node.data)
+          ? (node.data as Record<string, unknown>)
+          : {};
+    } else if (nodeType && providedNodeData) {
+      const workflow = await prisma.workflow.findFirst({
+        where: { id: workflowId, userId },
+      });
+      if (!workflow) {
+        return { success: false, error: "Unauthorized" };
+      }
+      resolvedType = nodeType as NodeType;
+      resolvedData = providedNodeData;
+    } else {
+      return {
+        success: false,
+        error: "Node not found. Please save the workflow first or try again.",
+      };
     }
 
-    if (node.workflow.userId !== userId) {
-      return { success: false, error: "Unauthorized" };
-    }
-
-    if (TRIGGER_NODE_TYPES.includes(node.type as NodeType)) {
+    if (TRIGGER_NODE_TYPES.includes(resolvedType as NodeType)) {
       return {
         success: false,
         error: "Trigger nodes cannot be tested individually",
       };
     }
 
-    const executor = getExecutor(node.type as NodeType);
+    const executor = getExecutor(resolvedType as NodeType);
 
     const step = createMockStep() as unknown as Parameters<
       typeof executor
     >[0]["step"];
-    const data =
-      node.data && typeof node.data === "object" && !Array.isArray(node.data)
-        ? (node.data as Record<string, unknown>)
-        : {};
     const nodeData = await hydrateNodeData({
-      nodeType: node.type,
-      data,
+      nodeType: resolvedType,
+      data: resolvedData,
       userId,
     });
 
     const result = await executor({
       data: nodeData,
-      nodeId: node.id,
+      nodeId: nodeId,
       workflowId,
       userId,
       context: mockContext,
