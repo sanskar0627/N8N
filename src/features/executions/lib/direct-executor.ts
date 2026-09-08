@@ -43,8 +43,27 @@ export const executeWorkflowDirect = async (
     nodes: DirectExecutorNode[];
     connections: DirectExecutorConnection[];
   },
+  options?: {
+    initialData?: Record<string, unknown>;
+    eventId?: string;
+  },
 ) => {
-  const inngestEventId = createId();
+  const inngestEventId = options?.eventId ?? createId();
+
+  const existing = await prisma.execution.findUnique({
+    where: { inngestEventId },
+  });
+  if (
+    existing &&
+    (existing.status === ExecutionStatus.SUCCESS ||
+      existing.status === ExecutionStatus.RUNNING)
+  ) {
+    return {
+      workflowId,
+      executionId: inngestEventId,
+      result: asRecord(existing.output),
+    };
+  }
 
   const workflow = await prisma.workflow.findUniqueOrThrow({
     where: { id: workflowId },
@@ -93,16 +112,26 @@ export const executeWorkflowDirect = async (
   const connectionsForSort = connections as unknown as Connection[];
   const sortedNodes = topologicalSort(nodesForSort, connectionsForSort);
 
-  await prisma.execution.create({
-    data: {
+  await prisma.execution.upsert({
+    where: { inngestEventId },
+    create: {
       workflowId,
       inngestEventId,
+    },
+    update: {
+      workflowId,
+      status: ExecutionStatus.RUNNING,
+      error: null,
+      errorStack: null,
+      completedAt: null,
     },
   });
 
   try {
     const mockStep = createMockStep();
-    let context: WorkflowContext = {};
+    let context: WorkflowContext = options?.initialData
+      ? { ...options.initialData }
+      : {};
 
     console.log(
       "[executeWorkflowDirect] running",

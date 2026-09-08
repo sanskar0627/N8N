@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { readNodeSecretSafe } from "@/features/credentials/lib/node-secret";
+import { executeWorkflowDirect } from "@/features/executions/lib/direct-executor";
 import { stripeEventTypesSchema } from "@/features/triggers/components/stripe-trigger/schema";
 import {
   buildStripeInitialData,
@@ -8,8 +9,9 @@ import {
   shouldProcessStripeEvent,
 } from "@/features/triggers/components/stripe-trigger/utils";
 import { NodeType } from "@/generated/prisma/enums";
-import { sendWorkflowExecution } from "@/inngest/utils";
 import prisma from "@/lib/db";
+
+export const maxDuration = 60;
 
 const MAX_BODY_BYTES = 512 * 1024;
 const stripe = new Stripe("sk_test_m9m_webhook_verification");
@@ -96,8 +98,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await sendWorkflowExecution({
-      workflowId,
+    await executeWorkflowDirect(workflowId, undefined, {
       initialData: buildStripeInitialData(event),
       eventId: getStripeEventId(workflowId, nodeId, event.id),
     });
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
       { received: true, eventId: event.id },
       { status: 202 },
     );
-  } catch {
-    return errorResponse("Failed to queue workflow execution", 500);
+  } catch (error) {
+    console.error("[stripe webhook] execution failed:", error);
+    return errorResponse("Failed to run workflow execution", 500);
   }
 }

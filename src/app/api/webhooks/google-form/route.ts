@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { readNodeSecretSafe } from "@/features/credentials/lib/node-secret";
+import { executeWorkflowDirect } from "@/features/executions/lib/direct-executor";
 import { googleFormWebhookPayloadSchema } from "@/features/triggers/components/google-form-trigger/schema";
 import {
   buildGoogleFormInitialData,
@@ -7,8 +8,9 @@ import {
   safeCompareSecrets,
 } from "@/features/triggers/components/google-form-trigger/utils";
 import { NodeType } from "@/generated/prisma/enums";
-import { sendWorkflowExecution } from "@/inngest/utils";
 import prisma from "@/lib/db";
+
+export const maxDuration = 60;
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -84,8 +86,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await sendWorkflowExecution({
-      workflowId,
+    await executeWorkflowDirect(workflowId, undefined, {
       initialData: buildGoogleFormInitialData(payload.data),
       eventId: getGoogleFormEventId(workflowId, payload.data.responseId),
     });
@@ -94,7 +95,8 @@ export async function POST(request: NextRequest) {
       { success: true, message: "Google Form submission accepted" },
       { status: 202 },
     );
-  } catch {
-    return errorResponse("Failed to queue workflow execution", 500);
+  } catch (error) {
+    console.error("[google-form webhook] execution failed:", error);
+    return errorResponse("Failed to run workflow execution", 500);
   }
 }
