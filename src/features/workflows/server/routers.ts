@@ -536,20 +536,17 @@ export const workflowsRouter = createTRPCRouter({
         }
       }
 
-      // Try Inngest first, fall back to direct execution
-      try {
-        await sendWorkflowExecution({ workflowId: input.id });
-      } catch (inngestError) {
-        console.warn("[workflows.execute] Inngest unavailable, running directly:", inngestError instanceof Error ? inngestError.message : inngestError);
+      // Run execution directly; optionally dispatch to Inngest when configured
+      const useInngest = Boolean(process.env.INNGEST_EVENT_KEY || process.env.INNGEST_DEV);
+      if (useInngest) {
         try {
+          await sendWorkflowExecution({ workflowId: input.id });
+        } catch (inngestError) {
+          console.warn("[workflows.execute] Inngest send failed, running directly:", inngestError instanceof Error ? inngestError.message : inngestError);
           await executeWorkflowDirect(input.id);
-        } catch (execError) {
-          console.error("[workflows.execute] Direct execution failed:", execError);
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: execError instanceof Error ? execError.message : "Failed to execute workflow",
-          });
         }
+      } else {
+        await executeWorkflowDirect(input.id);
       }
 
       return workflow;
