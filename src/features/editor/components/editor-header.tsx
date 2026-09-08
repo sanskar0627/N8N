@@ -1,8 +1,10 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useAtomValue } from "jotai";
 import { SaveIcon } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,16 +12,16 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useAtomValue } from "jotai";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { serializeWorkflowCanvas } from "@/features/editor/lib/serialize-canvas";
+import { editorAtom } from "@/features/editor/store/atoms";
 import {
   useSuspenseWorkflow,
-  useUpdateWorkflowName,
   useUpdateWorkflow,
+  useUpdateWorkflowName,
 } from "@/features/workflows/hooks/use-workflows";
-import { editorAtom } from "@/features/editor/store/atoms";
 
 export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
   const editor = useAtomValue(editorAtom);
@@ -28,26 +30,25 @@ export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
   const handleSave = () => {
     if (!editor) return;
 
-    const nodes = editor.getNodes().map((node) => ({
-      id: node.id,
-      type: node.type,
-      position: node.position,
-      data: node.data,
-    }));
-
-    const edges = editor.getEdges().map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-    }));
+    const { nodes, edges } = serializeWorkflowCanvas(
+      editor.getNodes(),
+      editor.getEdges(),
+    );
+    if (nodes.length === 0) {
+      toast.error("Canvas has no nodes to save");
+      return;
+    }
 
     updateWorkflow.mutate({ id: workflowId, nodes, edges });
   };
 
   return (
     <div className="ml-auto">
-      <Button size="sm" onClick={handleSave} disabled={updateWorkflow.isPending || !editor}>
+      <Button
+        size="sm"
+        onClick={handleSave}
+        disabled={updateWorkflow.isPending || !editor}
+      >
         <SaveIcon className="size-4" />
         Save
       </Button>
@@ -119,7 +120,10 @@ export const EditorNameInput = ({ workflowId }: { workflowId: string }) => {
   }
 
   return (
-    <BreadcrumbItem className="cursor-pointer hover:text-foreground transition-colors" onClick={() => setIsEditing(true)}>
+    <BreadcrumbItem
+      className="cursor-pointer hover:text-foreground transition-colors"
+      onClick={() => setIsEditing(true)}
+    >
       {workflow.name}
     </BreadcrumbItem>
   );

@@ -6,6 +6,8 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
+    ports:
+      - "3069:3000"
     expose:
       - "3000"
     networks:

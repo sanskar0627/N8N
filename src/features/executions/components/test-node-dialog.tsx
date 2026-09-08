@@ -1,5 +1,6 @@
 "use client";
 
+import { useAtomValue } from "jotai";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -21,12 +22,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { serializeWorkflowCanvas } from "@/features/editor/lib/serialize-canvas";
+import { editorAtom } from "@/features/editor/store/atoms";
 import {
   buildContextFromVariables,
   extractTemplateVariables,
 } from "@/features/executions/lib/template-variables";
-import { useAtomValue } from "jotai";
-import { editorAtom } from "@/features/editor/store/atoms";
 import { useUpdateWorkflow } from "@/features/workflows/hooks/use-workflows";
 import { useExecuteNode } from "../hooks/use-execute-node";
 
@@ -105,19 +106,13 @@ export const TestNodeDialog = ({
     // auto-save the workflow so the DB has the latest node configs
     if (editor) {
       try {
-        const nodes = editor.getNodes().map((node) => ({
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: node.data,
-        }));
-        const edges = editor.getEdges().map((edge) => ({
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: edge.sourceHandle,
-          targetHandle: edge.targetHandle,
-        }));
-        await updateWorkflow.mutateAsync({ id: workflowId, nodes, edges });
+        const { nodes, edges } = serializeWorkflowCanvas(
+          editor.getNodes(),
+          editor.getEdges(),
+        );
+        if (nodes.length > 0) {
+          await updateWorkflow.mutateAsync({ id: workflowId, nodes, edges });
+        }
       } catch {
         // save failed, still try to run with provided nodeData as fallback
       }
@@ -159,7 +154,9 @@ export const TestNodeDialog = ({
   };
 
   const isRunning =
-    executionResult.status === "running" || updateWorkflow.isPending || executeNode.isPending;
+    executionResult.status === "running" ||
+    updateWorkflow.isPending ||
+    executeNode.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

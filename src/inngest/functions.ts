@@ -2,7 +2,7 @@ import { NonRetriableError } from "inngest";
 import { hydrateNodeData } from "@/features/credentials/lib/hydrate-ai-node-data";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import { redactExecutionOutput } from "@/features/executions/lib/redact-execution-output";
-import { ExecutionStatus, type NodeType } from "@/generated/prisma/enums";
+import { ExecutionStatus, NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
 import { workflowNodeStatusChannel } from "./channels/workflow-node-status";
 import { inngest } from "./client";
@@ -54,10 +54,19 @@ export const executeWorkflow = inngest.createFunction(
           },
         });
 
-        const sorted = topologicalSort(workflow.nodes, workflow.connection);
+        const executable = workflow.nodes.filter(
+          (node) => node.type !== NodeType.INITIAL,
+        );
+        const sorted = topologicalSort(executable, workflow.connection);
         return { sortedNodes: sorted, userId: workflow.userId };
       },
     );
+
+    if (sortedNodes.length === 0) {
+      throw new NonRetriableError(
+        "This workflow has no executable nodes. Add a trigger and at least one action, then try again.",
+      );
+    }
 
     let context = event.data.initialData || {};
 

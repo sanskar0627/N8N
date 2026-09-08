@@ -1,34 +1,25 @@
+import { useReactFlow } from "@xyflow/react";
 import { FlaskConicalIcon, Loader2Icon } from "lucide-react";
-import { useAtomValue } from "jotai";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { serializeWorkflowCanvas } from "@/features/editor/lib/serialize-canvas";
 import { useExecuteWorkflow } from "@/features/workflows/hooks/use-workflows";
-import { editorAtom } from "@/features/editor/store/atoms";
 
 export const ExecuteWorkflowButton = ({
   workflowId,
 }: {
   workflowId: string;
 }) => {
-  const editor = useAtomValue(editorAtom);
+  const { getNodes, getEdges } = useReactFlow();
   const executeWorkflow = useExecuteWorkflow();
 
   const handleExecute = () => {
-    if (!editor) return;
-
-    const nodes = editor.getNodes().map((node) => ({
-      id: node.id,
-      type: node.type,
-      position: node.position,
-      data: node.data,
-    }));
-
-    const edges = editor.getEdges().map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-    }));
+    const { nodes, edges } = serializeWorkflowCanvas(getNodes(), getEdges());
+    if (nodes.length === 0) {
+      toast.error("Canvas has no nodes to execute");
+      return;
+    }
 
     executeWorkflow.mutate({ id: workflowId, nodes, edges });
   };
@@ -37,7 +28,7 @@ export const ExecuteWorkflowButton = ({
     <Button
       size="lg"
       onClick={handleExecute}
-      disabled={executeWorkflow.isPending || !editor}
+      disabled={executeWorkflow.isPending}
     >
       {executeWorkflow.isPending ? (
         <Loader2Icon className="size-4 animate-spin" />

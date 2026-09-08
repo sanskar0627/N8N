@@ -20,6 +20,7 @@ import {
   isWebhookMessageNodeType,
   WEBHOOK_MESSAGE_NODE_TYPES,
 } from "@/features/executions/components/webhook-message/config";
+import { executeWorkflowDirect } from "@/features/executions/lib/direct-executor";
 import { redactExecutionOutput } from "@/features/executions/lib/redact-execution-output";
 import { executeNodeForTest } from "@/features/executions/lib/test-executor";
 import {
@@ -31,8 +32,7 @@ import {
   stripeWebhookSecretSchema,
 } from "@/features/triggers/components/stripe-trigger/schema";
 import { NodeType } from "@/generated/prisma/enums";
-import { sendWorkflowExecution } from "@/inngest/utils";
-import { executeWorkflowDirect } from "@/features/executions/lib/direct-executor";
+import { sendWorkflowExecution, shouldUseInngest } from "@/inngest/utils";
 import prisma from "@/lib/db";
 import {
   getPolarCustomerState,
@@ -72,6 +72,13 @@ async function saveWorkflowNodes(params: {
 }) {
   const { workflowId, nodes, edges } = params;
 
+  if (nodes.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Cannot save a workflow with no nodes",
+    });
+  }
+
   // Validate node types before saving
   const validNodeTypes = new Set(Object.values(NodeType));
   for (const node of nodes) {
@@ -83,51 +90,53 @@ async function saveWorkflowNodes(params: {
     }
   }
 
-  return await prisma.$transaction(async (tx) => {
-    // Fetch existing nodes for secret preservation
-    const allExistingNodes = await tx.node.findMany({
-      where: { workflowId },
-      select: { id: true, type: true, data: true },
-    });
-    const privateNodeTypes = new Set<NodeType>([
-      NodeType.GOOGLE_FORM_TRIGGER,
-      NodeType.STRIPE_TRIGGER,
-      ...AI_NODE_TYPES,
-      ...WEBHOOK_MESSAGE_NODE_TYPES,
-    ]);
-    const existingPrivateNodes = allExistingNodes.filter(
-      (node: { type: string }) => privateNodeTypes.has(node.type as NodeType),
-    );
-
-    const extractSecret = (
-      nodes: typeof existingPrivateNodes,
-      key: string,
-    ) =>
-      new Map(
-        nodes.flatMap((node: { id: string; data: unknown }) => {
-          const data =
-            node.data &&
-            typeof node.data === "object" &&
-            !Array.isArray(node.data)
-              ? (node.data as Record<string, unknown>)
-              : {};
-          return typeof data[key] === "string"
-            ? [[node.id, data[key] as string] as const]
-            : [];
-        }),
+  return await prisma.$transaction(
+    async (tx) => {
+      // Fetch existing nodes for secret preservation
+      const allExistingNodes = await tx.node.findMany({
+        where: { workflowId },
+        select: { id: true, type: true, data: true },
+      });
+      const privateNodeTypes = new Set<NodeType>([
+        NodeType.GOOGLE_FORM_TRIGGER,
+        NodeType.STRIPE_TRIGGER,
+        ...AI_NODE_TYPES,
+        ...WEBHOOK_MESSAGE_NODE_TYPES,
+      ]);
+      const existingPrivateNodes = allExistingNodes.filter(
+        (node: { type: string }) => privateNodeTypes.has(node.type as NodeType),
       );
 
-    const googleFormSecrets = extractSecret(existingPrivateNodes, "secret");
-    const stripeWebhookSecrets = extractSecret(existingPrivateNodes, "webhookSecret");
-    const aiApiKeys = extractSecret(existingPrivateNodes, "apiKey");
-    const webhookUrls = extractSecret(existingPrivateNodes, "webhookUrl");
+      const extractSecret = (
+        secretNodes: typeof existingPrivateNodes,
+        key: string,
+      ) =>
+        new Map(
+          secretNodes.flatMap((node: { id: string; data: unknown }) => {
+            const data =
+              node.data &&
+              typeof node.data === "object" &&
+              !Array.isArray(node.data)
+                ? (node.data as Record<string, unknown>)
+                : {};
+            return typeof data[key] === "string"
+              ? [[node.id, data[key] as string] as const]
+              : [];
+          }),
+        );
 
-    // Delete existing nodes and connections (cascade deletes connections)
-    await tx.node.deleteMany({ where: { workflowId } });
+      const googleFormSecrets = extractSecret(existingPrivateNodes, "secret");
+      const stripeWebhookSecrets = extractSecret(
+        existingPrivateNodes,
+        "webhookSecret",
+      );
+      const aiApiKeys = extractSecret(existingPrivateNodes, "apiKey");
+      const webhookUrls = extractSecret(existingPrivateNodes, "webhookUrl");
 
-    // Create nodes
-    await tx.node.createMany({
-      data: nodes.map((node) => {
+      const incomingIds = new Set(nodes.map((node) => node.id));
+      const existingIds = new Set(allExistingNodes.map((node) => node.id));
+
+      const records = nodes.map((node) => {
         const data = { ...(node.data || {}) };
 
         if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
@@ -181,35 +190,64 @@ async function saveWorkflowNodes(params: {
           position: { x: node.position.x, y: node.position.y },
           data: sanitizedData,
         };
-      }),
-    });
-
-    // Create connections (deduplicate to avoid unique constraint violation)
-    const edgeKeys = new Set<string>();
-    const uniqueEdges = edges.filter((edge) => {
-      const key = `${edge.source}:${edge.sourceHandle || "main"}:${edge.target}:${edge.targetHandle || "main"}`;
-      if (edgeKeys.has(key)) return false;
-      edgeKeys.add(key);
-      return true;
-    });
-    if (uniqueEdges.length > 0) {
-      await tx.connection.createMany({
-        data: uniqueEdges.map((edge) => ({
-          workflowId,
-          fromNodeId: edge.source,
-          toNodeId: edge.target,
-          fromOutput: edge.sourceHandle || "main",
-          toInput: edge.targetHandle || "main",
-        })),
       });
-    }
 
-    // Update workflow's updatedAt timestamp
-    await tx.workflow.update({
-      where: { id: workflowId },
-      data: { updatedAt: new Date() },
-    });
-  });
+      const toCreate = records.filter((record) => !existingIds.has(record.id));
+      const toUpdate = records.filter((record) => existingIds.has(record.id));
+
+      // Drop connections first so node updates cannot violate FKs.
+      await tx.connection.deleteMany({ where: { workflowId } });
+
+      // Create new nodes before deleting old ones so a failed create cannot wipe the graph.
+      if (toCreate.length > 0) {
+        await tx.node.createMany({ data: toCreate });
+      }
+
+      for (const record of toUpdate) {
+        await tx.node.update({
+          where: { id: record.id },
+          data: {
+            name: record.name,
+            type: record.type,
+            position: record.position,
+            data: record.data,
+          },
+        });
+      }
+
+      await tx.node.deleteMany({
+        where: {
+          workflowId,
+          id: { notIn: [...incomingIds] },
+        },
+      });
+
+      const edgeKeys = new Set<string>();
+      const uniqueEdges = edges.filter((edge) => {
+        const key = `${edge.source}:${edge.sourceHandle || "main"}:${edge.target}:${edge.targetHandle || "main"}`;
+        if (edgeKeys.has(key)) return false;
+        edgeKeys.add(key);
+        return true;
+      });
+      if (uniqueEdges.length > 0) {
+        await tx.connection.createMany({
+          data: uniqueEdges.map((edge) => ({
+            workflowId,
+            fromNodeId: edge.source,
+            toNodeId: edge.target,
+            fromOutput: edge.sourceHandle || "main",
+            toInput: edge.targetHandle || "main",
+          })),
+        });
+      }
+
+      await tx.workflow.update({
+        where: { id: workflowId },
+        data: { updatedAt: new Date() },
+      });
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
 }
 
 export const workflowsRouter = createTRPCRouter({
@@ -335,7 +373,8 @@ export const workflowsRouter = createTRPCRouter({
         console.error("[workflows.update] Failed to save workflow:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: error instanceof Error ? error.message : "Failed to save workflow",
+          message:
+            error instanceof Error ? error.message : "Failed to save workflow",
         });
       }
 
@@ -515,38 +554,86 @@ export const workflowsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      console.log("[workflows.execute] start", {
+        id: input.id,
+        nodeCount: input.nodes?.length ?? null,
+        edgeCount: input.edges?.length ?? null,
+        types: input.nodes?.map((node) => node.type) ?? null,
+      });
+
       const workflow = await prisma.workflow.findUniqueOrThrow({
         where: { id: input.id, userId: ctx.auth.user.id },
       });
 
-      // Auto-save canvas state before executing
-      if (input.nodes && input.edges) {
+      // Auto-save canvas state before executing. Empty arrays are truthy, so
+      // require a real node list — never wipe the graph with [].
+      if (input.nodes && input.nodes.length > 0) {
         try {
           await saveWorkflowNodes({
             workflowId: input.id,
             nodes: input.nodes,
-            edges: input.edges,
+            edges: input.edges ?? [],
           });
         } catch (saveError) {
           console.error("[workflows.execute] Auto-save failed:", saveError);
+          if (saveError instanceof TRPCError) {
+            throw saveError;
+          }
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: saveError instanceof Error ? saveError.message : "Failed to save workflow before execution",
+            message:
+              saveError instanceof Error
+                ? saveError.message
+                : "Failed to save workflow before execution",
           });
         }
       }
 
-      // Run execution directly; optionally dispatch to Inngest when configured
-      const useInngest = Boolean(process.env.INNGEST_EVENT_KEY || process.env.INNGEST_DEV);
-      if (useInngest) {
-        try {
-          await sendWorkflowExecution({ workflowId: input.id });
-        } catch (inngestError) {
-          console.warn("[workflows.execute] Inngest send failed, running directly:", inngestError instanceof Error ? inngestError.message : inngestError);
-          await executeWorkflowDirect(input.id);
+      const canvasGraph =
+        input.nodes && input.nodes.length > 0
+          ? {
+              nodes: input.nodes.map((node) => ({
+                id: node.id,
+                type: node.type || "INITIAL",
+                data: node.data,
+              })),
+              connections: (input.edges ?? []).map((edge) => ({
+                fromNodeId: edge.source,
+                toNodeId: edge.target,
+                fromOutput: edge.sourceHandle,
+                toInput: edge.targetHandle,
+              })),
+            }
+          : undefined;
+
+      try {
+        if (shouldUseInngest()) {
+          try {
+            await sendWorkflowExecution({ workflowId: input.id });
+          } catch (inngestError) {
+            console.warn(
+              "[workflows.execute] Inngest send failed, running directly:",
+              inngestError instanceof Error
+                ? inngestError.message
+                : inngestError,
+            );
+            await executeWorkflowDirect(input.id, canvasGraph);
+          }
+        } else {
+          await executeWorkflowDirect(input.id, canvasGraph);
         }
-      } else {
-        await executeWorkflowDirect(input.id);
+      } catch (executeError) {
+        console.error("[workflows.execute] run failed:", executeError);
+        if (executeError instanceof TRPCError) {
+          throw executeError;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            executeError instanceof Error
+              ? executeError.message
+              : "Failed to execute workflow",
+        });
       }
 
       return workflow;

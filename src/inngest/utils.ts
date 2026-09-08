@@ -45,6 +45,17 @@ export const topologicalSort = (
   });
 };
 
+export const shouldUseInngest = () => {
+  const eventKey = process.env.INNGEST_EVENT_KEY;
+  const signingKey = process.env.INNGEST_SIGNING_KEY;
+  if (eventKey && signingKey) {
+    return true;
+  }
+  return (
+    process.env.NODE_ENV !== "production" && Boolean(process.env.INNGEST_DEV)
+  );
+};
+
 export const sendWorkflowExecution = async ({
   eventId,
   ...data
