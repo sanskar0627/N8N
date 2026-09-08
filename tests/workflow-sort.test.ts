@@ -2,29 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { reachableFrom, topologicalSort } from "../src/inngest/utils";
 
-const node = (id: string) =>
-  ({
-    id,
-    workflowId: "wf",
-    name: id,
-    type: "HTTP_REQUEST",
-    position: {},
-    data: {},
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }) as never;
-
-const conn = (fromNodeId: string, toNodeId: string) =>
-  ({
-    id: `${fromNodeId}-${toNodeId}`,
-    workflowId: "wf",
-    fromNodeId,
-    toNodeId,
-    fromOutput: "main",
-    toInput: "main",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }) as never;
+const node = (id: string) => ({ id });
+const conn = (fromNodeId: string, toNodeId: string) => ({ fromNodeId, toNodeId });
 
 test("runs the trigger before connected actions", () => {
   const sorted = topologicalSort(

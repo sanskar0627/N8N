@@ -41,10 +41,10 @@ export const reachableFrom = <T extends GraphNode>(
   };
 };
 
-export const topologicalSort = (
-  nodes: Node[],
-  connections: Connection[],
-): Node[] => {
+export const topologicalSort = <T extends GraphNode>(
+  nodes: T[],
+  connections: GraphConnection[],
+): T[] => {
   if (nodes.length === 0) return [];
   if (connections.length === 0) return nodes;
 
