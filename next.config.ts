@@ -3,14 +3,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  devIndicators:false,
+  devIndicators: false,
+  serverExternalPackages: ["pg", "@prisma/adapter-pg"],
   async redirects() {
     return [
       {
         source: "/",
         destination: "/workflows",
         permanent: false,
-      }
+      },
     ];
   },
 };

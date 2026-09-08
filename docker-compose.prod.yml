@@ -1,11 +1,16 @@
 services:
   app:
+    image: m9m
     build: .
     container_name: m9m-app
     restart: unless-stopped
     env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --dns-result-order=ipv4first
     ports:
       - "3069:3000"
     expose:
