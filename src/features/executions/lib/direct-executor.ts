@@ -5,7 +5,7 @@ import { redactExecutionOutput } from "@/features/executions/lib/redact-executio
 import type { WorkflowContext } from "@/features/executions/types";
 import type { Connection, Node } from "@/generated/prisma/client";
 import { ExecutionStatus, NodeType } from "@/generated/prisma/enums";
-import { topologicalSort } from "@/inngest/utils";
+import { reachableFrom, topologicalSort } from "@/inngest/utils";
 import prisma from "@/lib/db";
 
 export type DirectExecutorNode = {
@@ -46,6 +46,7 @@ export const executeWorkflowDirect = async (
   options?: {
     initialData?: Record<string, unknown>;
     eventId?: string;
+    startNodeId?: string;
   },
 ) => {
   const inngestEventId = options?.eventId ?? createId();
@@ -108,9 +109,27 @@ export const executeWorkflowDirect = async (
           executableNodes.some((node) => node.id === connection.toNodeId),
       );
 
-  const nodesForSort = executableNodes as unknown as Node[];
-  const connectionsForSort = connections as unknown as Connection[];
-  const sortedNodes = topologicalSort(nodesForSort, connectionsForSort);
+  const startIds = options?.startNodeId
+    ? [options.startNodeId]
+    : executableNodes
+        .filter((node) => node.type === NodeType.MANUAL_TRIGGER)
+        .map((node) => node.id);
+
+  const scoped =
+    startIds.length > 0
+      ? reachableFrom(startIds, executableNodes, connections)
+      : { nodes: executableNodes, connections };
+
+  if (scoped.nodes.length === 0) {
+    throw new Error(
+      "This workflow has no executable nodes. Connect a trigger to your actions, then try again.",
+    );
+  }
+
+  const sortedNodes = topologicalSort(
+    scoped.nodes as unknown as Node[],
+    scoped.connections as unknown as Connection[],
+  );
 
   await prisma.execution.upsert({
     where: { inngestEventId },

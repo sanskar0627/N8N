@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     await executeWorkflowDirect(workflowId, undefined, {
       initialData: buildGoogleFormInitialData(payload.data),
       eventId: getGoogleFormEventId(workflowId, payload.data.responseId),
+      startNodeId: nodeId,
     });
 
     return NextResponse.json(

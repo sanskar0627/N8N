@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
     await executeWorkflowDirect(workflowId, undefined, {
       initialData: buildStripeInitialData(event),
       eventId: getStripeEventId(workflowId, nodeId, event.id),
+      startNodeId: nodeId,
     });
 
     return NextResponse.json(
