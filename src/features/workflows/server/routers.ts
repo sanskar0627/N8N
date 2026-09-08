@@ -40,6 +40,178 @@ import {
 } from "@/lib/polar-customer";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 
+// Shared node/edge schema for reuse across procedures
+const nodesSchema = z.array(
+  z.object({
+    id: z.string(),
+    type: z.string().nullish(),
+    position: z.object({ x: z.number(), y: z.number() }),
+    data: z.record(z.string(), z.any()).optional(),
+  }),
+);
+const edgesSchema = z.array(
+  z.object({
+    source: z.string(),
+    target: z.string(),
+    sourceHandle: z.string().nullish(),
+    targetHandle: z.string().nullish(),
+  }),
+);
+
+type NodesInput = z.infer<typeof nodesSchema>;
+type EdgesInput = z.infer<typeof edgesSchema>;
+
+/**
+ * Save workflow nodes and edges to the database.
+ * Handles secret preservation for private node types and connection deduplication.
+ */
+async function saveWorkflowNodes(params: {
+  workflowId: string;
+  nodes: NodesInput;
+  edges: EdgesInput;
+}) {
+  const { workflowId, nodes, edges } = params;
+
+  // Validate node types before saving
+  const validNodeTypes = new Set(Object.values(NodeType));
+  for (const node of nodes) {
+    if (!node.type || !validNodeTypes.has(node.type as NodeType)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Invalid node type "${node.type}" for node ${node.id}`,
+      });
+    }
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    // Fetch existing nodes for secret preservation
+    const allExistingNodes = await tx.node.findMany({
+      where: { workflowId },
+      select: { id: true, type: true, data: true },
+    });
+    const privateNodeTypes = new Set<NodeType>([
+      NodeType.GOOGLE_FORM_TRIGGER,
+      NodeType.STRIPE_TRIGGER,
+      ...AI_NODE_TYPES,
+      ...WEBHOOK_MESSAGE_NODE_TYPES,
+    ]);
+    const existingPrivateNodes = allExistingNodes.filter(
+      (node: { type: string }) => privateNodeTypes.has(node.type as NodeType),
+    );
+
+    const extractSecret = (
+      nodes: typeof existingPrivateNodes,
+      key: string,
+    ) =>
+      new Map(
+        nodes.flatMap((node: { id: string; data: unknown }) => {
+          const data =
+            node.data &&
+            typeof node.data === "object" &&
+            !Array.isArray(node.data)
+              ? (node.data as Record<string, unknown>)
+              : {};
+          return typeof data[key] === "string"
+            ? [[node.id, data[key] as string] as const]
+            : [];
+        }),
+      );
+
+    const googleFormSecrets = extractSecret(existingPrivateNodes, "secret");
+    const stripeWebhookSecrets = extractSecret(existingPrivateNodes, "webhookSecret");
+    const aiApiKeys = extractSecret(existingPrivateNodes, "apiKey");
+    const webhookUrls = extractSecret(existingPrivateNodes, "webhookUrl");
+
+    // Delete existing nodes and connections (cascade deletes connections)
+    await tx.node.deleteMany({ where: { workflowId } });
+
+    // Create nodes
+    await tx.node.createMany({
+      data: nodes.map((node) => {
+        const data = { ...(node.data || {}) };
+
+        if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
+          delete data.secret;
+          const existingSecret = googleFormSecrets.get(node.id);
+          if (existingSecret) {
+            data.secret = persistNodeSecret(existingSecret);
+          }
+        }
+
+        if (node.type === NodeType.STRIPE_TRIGGER) {
+          delete data.webhookSecret;
+          const existingSecret = stripeWebhookSecrets.get(node.id);
+          if (existingSecret) {
+            data.webhookSecret = persistNodeSecret(existingSecret);
+          }
+        }
+
+        if (typeof node.type === "string" && isAiNodeType(node.type)) {
+          delete data.apiKey;
+          const hasCredential =
+            typeof data.credentialId === "string" &&
+            data.credentialId.length > 0;
+          const existingApiKey = aiApiKeys.get(node.id);
+          if (!hasCredential && existingApiKey) {
+            data.apiKey = persistNodeSecret(existingApiKey);
+          }
+        }
+
+        if (
+          typeof node.type === "string" &&
+          isWebhookMessageNodeType(node.type)
+        ) {
+          delete data.webhookUrl;
+          const hasCredential =
+            typeof data.credentialId === "string" &&
+            data.credentialId.length > 0;
+          const existingWebhookUrl = webhookUrls.get(node.id);
+          if (!hasCredential && existingWebhookUrl) {
+            data.webhookUrl = persistNodeSecret(existingWebhookUrl);
+          }
+        }
+
+        const sanitizedData = JSON.parse(JSON.stringify(data || {}));
+
+        return {
+          id: node.id,
+          workflowId,
+          name: node.type || "unknown",
+          type: node.type as NodeType,
+          position: { x: node.position.x, y: node.position.y },
+          data: sanitizedData,
+        };
+      }),
+    });
+
+    // Create connections (deduplicate to avoid unique constraint violation)
+    const edgeKeys = new Set<string>();
+    const uniqueEdges = edges.filter((edge) => {
+      const key = `${edge.source}:${edge.sourceHandle || "main"}:${edge.target}:${edge.targetHandle || "main"}`;
+      if (edgeKeys.has(key)) return false;
+      edgeKeys.add(key);
+      return true;
+    });
+    if (uniqueEdges.length > 0) {
+      await tx.connection.createMany({
+        data: uniqueEdges.map((edge) => ({
+          workflowId,
+          fromNodeId: edge.source,
+          toNodeId: edge.target,
+          fromOutput: edge.sourceHandle || "main",
+          toInput: edge.targetHandle || "main",
+        })),
+      });
+    }
+
+    // Update workflow's updatedAt timestamp
+    await tx.workflow.update({
+      where: { id: workflowId },
+      data: { updatedAt: new Date() },
+    });
+  });
+}
+
 export const workflowsRouter = createTRPCRouter({
   create: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.auth.user.id;
@@ -101,22 +273,8 @@ export const workflowsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        nodes: z.array(
-          z.object({
-            id: z.string(),
-            type: z.string().nullish(),
-            position: z.object({ x: z.number(), y: z.number() }),
-            data: z.record(z.string(), z.any()).optional(),
-          }),
-        ),
-        edges: z.array(
-          z.object({
-            source: z.string(),
-            target: z.string(),
-            sourceHandle: z.string().nullish(),
-            targetHandle: z.string().nullish(),
-          }),
-        ),
+        nodes: nodesSchema,
+        edges: edgesSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -171,193 +329,8 @@ export const workflowsRouter = createTRPCRouter({
         }
       }
 
-      // Validate node types before saving
-      const validNodeTypes = new Set(Object.values(NodeType));
-      for (const node of nodes) {
-        if (!node.type || !validNodeTypes.has(node.type as NodeType)) {
-          console.error("[workflows.update] Invalid node type:", {
-            nodeId: node.id,
-            type: node.type,
-            validTypes: [...validNodeTypes],
-          });
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Invalid node type "${node.type}" for node ${node.id}`,
-          });
-        }
-      }
-
-      // Transaction to ensure consistency
       try {
-      return await prisma.$transaction(async (tx) => {
-        // Fetch all nodes and filter in JS to avoid enum mismatch if DB is behind schema
-        const allExistingNodes = await tx.node.findMany({
-          where: { workflowId: id },
-          select: { id: true, type: true, data: true },
-        });
-        const privateNodeTypes = new Set<NodeType>([
-          NodeType.GOOGLE_FORM_TRIGGER,
-          NodeType.STRIPE_TRIGGER,
-          ...AI_NODE_TYPES,
-          ...WEBHOOK_MESSAGE_NODE_TYPES,
-        ]);
-        const existingPrivateNodes = allExistingNodes.filter(
-          (node: { type: string }) => privateNodeTypes.has(node.type as NodeType),
-        );
-        const googleFormSecrets = new Map(
-          existingPrivateNodes.flatMap(
-            (node: { id: string; data: unknown }) => {
-              const data =
-                node.data &&
-                typeof node.data === "object" &&
-                !Array.isArray(node.data)
-                  ? (node.data as Record<string, unknown>)
-                  : {};
-              return typeof data.secret === "string"
-                ? [[node.id, data.secret] as const]
-                : [];
-            },
-          ),
-        );
-        const stripeWebhookSecrets = new Map(
-          existingPrivateNodes.flatMap(
-            (node: { id: string; data: unknown }) => {
-              const data =
-                node.data &&
-                typeof node.data === "object" &&
-                !Array.isArray(node.data)
-                  ? (node.data as Record<string, unknown>)
-                  : {};
-              return typeof data.webhookSecret === "string"
-                ? [[node.id, data.webhookSecret] as const]
-                : [];
-            },
-          ),
-        );
-        const aiApiKeys = new Map(
-          existingPrivateNodes.flatMap(
-            (node: { id: string; data: unknown }) => {
-              const data =
-                node.data &&
-                typeof node.data === "object" &&
-                !Array.isArray(node.data)
-                  ? (node.data as Record<string, unknown>)
-                  : {};
-              return typeof data.apiKey === "string"
-                ? [[node.id, data.apiKey] as const]
-                : [];
-            },
-          ),
-        );
-        const webhookUrls = new Map(
-          existingPrivateNodes.flatMap(
-            (node: { id: string; data: unknown }) => {
-              const data =
-                node.data &&
-                typeof node.data === "object" &&
-                !Array.isArray(node.data)
-                  ? (node.data as Record<string, unknown>)
-                  : {};
-              return typeof data.webhookUrl === "string"
-                ? [[node.id, data.webhookUrl] as const]
-                : [];
-            },
-          ),
-        );
-
-        // Delete existing nodes and connections (cascade deletes connections)
-        await tx.node.deleteMany({
-          where: { workflowId: id },
-        });
-
-        // Create nodes
-        await tx.node.createMany({
-          data: nodes.map((node) => {
-            const data = { ...(node.data || {}) };
-
-            if (node.type === NodeType.GOOGLE_FORM_TRIGGER) {
-              delete data.secret;
-              const existingSecret = googleFormSecrets.get(node.id);
-              if (existingSecret) {
-                data.secret = persistNodeSecret(existingSecret);
-              }
-            }
-
-            if (node.type === NodeType.STRIPE_TRIGGER) {
-              delete data.webhookSecret;
-              const existingSecret = stripeWebhookSecrets.get(node.id);
-              if (existingSecret) {
-                data.webhookSecret = persistNodeSecret(existingSecret);
-              }
-            }
-
-            if (typeof node.type === "string" && isAiNodeType(node.type)) {
-              delete data.apiKey;
-              const hasCredential =
-                typeof data.credentialId === "string" &&
-                data.credentialId.length > 0;
-              const existingApiKey = aiApiKeys.get(node.id);
-              if (!hasCredential && existingApiKey) {
-                data.apiKey = persistNodeSecret(existingApiKey);
-              }
-            }
-
-            if (
-              typeof node.type === "string" &&
-              isWebhookMessageNodeType(node.type)
-            ) {
-              delete data.webhookUrl;
-              const hasCredential =
-                typeof data.credentialId === "string" &&
-                data.credentialId.length > 0;
-              const existingWebhookUrl = webhookUrls.get(node.id);
-              if (!hasCredential && existingWebhookUrl) {
-                data.webhookUrl = persistNodeSecret(existingWebhookUrl);
-              }
-            }
-
-            // Ensure data is a clean JSON-serializable object
-            const sanitizedData = JSON.parse(JSON.stringify(data || {}));
-
-            return {
-              id: node.id,
-              workflowId: id,
-              name: node.type || "unknown",
-              type: node.type as NodeType,
-              position: { x: node.position.x, y: node.position.y },
-              data: sanitizedData,
-            };
-          }),
-        });
-
-        // Create connections (deduplicate to avoid unique constraint violation)
-        const edgeKeys = new Set<string>();
-        const uniqueEdges = edges.filter((edge) => {
-          const key = `${edge.source}:${edge.sourceHandle || "main"}:${edge.target}:${edge.targetHandle || "main"}`;
-          if (edgeKeys.has(key)) return false;
-          edgeKeys.add(key);
-          return true;
-        });
-        if (uniqueEdges.length > 0) {
-          await tx.connection.createMany({
-            data: uniqueEdges.map((edge) => ({
-              workflowId: id,
-              fromNodeId: edge.source,
-              toNodeId: edge.target,
-              fromOutput: edge.sourceHandle || "main",
-              toInput: edge.targetHandle || "main",
-            })),
-          });
-        }
-
-        // Update workflow's updatedAt timestamp
-        await tx.workflow.update({
-          where: { id },
-          data: { updatedAt: new Date() },
-        });
-
-        return workflow;
-      });
+        await saveWorkflowNodes({ workflowId: id, nodes, edges });
       } catch (error) {
         console.error("[workflows.update] Failed to save workflow:", error);
         throw new TRPCError({
@@ -365,6 +338,8 @@ export const workflowsRouter = createTRPCRouter({
           message: error instanceof Error ? error.message : "Failed to save workflow",
         });
       }
+
+      return workflow;
     }),
   generateGoogleFormSecret: protectedProcedure
     .input(
@@ -532,11 +507,34 @@ export const workflowsRouter = createTRPCRouter({
       };
     }),
   execute: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(
+      z.object({
+        id: z.string(),
+        nodes: nodesSchema.optional(),
+        edges: edgesSchema.optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const workflow = await prisma.workflow.findUniqueOrThrow({
         where: { id: input.id, userId: ctx.auth.user.id },
       });
+
+      // Auto-save canvas state before executing
+      if (input.nodes && input.edges) {
+        try {
+          await saveWorkflowNodes({
+            workflowId: input.id,
+            nodes: input.nodes,
+            edges: input.edges,
+          });
+        } catch (saveError) {
+          console.error("[workflows.execute] Auto-save failed:", saveError);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: saveError instanceof Error ? saveError.message : "Failed to save workflow before execution",
+          });
+        }
+      }
 
       // Try Inngest first, fall back to direct execution
       try {

@@ -2,7 +2,7 @@ import { FlaskConicalIcon, Loader2Icon } from "lucide-react";
 import { useAtomValue } from "jotai";
 
 import { Button } from "@/components/ui/button";
-import { useExecuteWorkflow, useUpdateWorkflow } from "@/features/workflows/hooks/use-workflows";
+import { useExecuteWorkflow } from "@/features/workflows/hooks/use-workflows";
 import { editorAtom } from "@/features/editor/store/atoms";
 
 export const ExecuteWorkflowButton = ({
@@ -11,12 +11,9 @@ export const ExecuteWorkflowButton = ({
   workflowId: string;
 }) => {
   const editor = useAtomValue(editorAtom);
-  const updateWorkflow = useUpdateWorkflow();
   const executeWorkflow = useExecuteWorkflow();
 
-  const isPending = updateWorkflow.isPending || executeWorkflow.isPending;
-
-  const handleExecute = async () => {
+  const handleExecute = () => {
     if (!editor) return;
 
     const nodes = editor.getNodes().map((node) => ({
@@ -33,26 +30,21 @@ export const ExecuteWorkflowButton = ({
       targetHandle: edge.targetHandle,
     }));
 
-    try {
-      await updateWorkflow.mutateAsync({ id: workflowId, nodes, edges });
-      executeWorkflow.mutate({ id: workflowId });
-    } catch {
-      // save failed — toast already shown by useUpdateWorkflow
-    }
+    executeWorkflow.mutate({ id: workflowId, nodes, edges });
   };
 
   return (
     <Button
       size="lg"
       onClick={handleExecute}
-      disabled={isPending || !editor}
+      disabled={executeWorkflow.isPending || !editor}
     >
-      {isPending ? (
+      {executeWorkflow.isPending ? (
         <Loader2Icon className="size-4 animate-spin" />
       ) : (
         <FlaskConicalIcon className="size-4" />
       )}
-      {updateWorkflow.isPending ? "Saving..." : executeWorkflow.isPending ? "Executing..." : "Execute workflow"}
+      {executeWorkflow.isPending ? "Executing..." : "Execute workflow"}
     </Button>
   );
 };
