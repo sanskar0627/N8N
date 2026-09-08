@@ -25,6 +25,9 @@ import {
   buildContextFromVariables,
   extractTemplateVariables,
 } from "@/features/executions/lib/template-variables";
+import { useAtomValue } from "jotai";
+import { editorAtom } from "@/features/editor/store/atoms";
+import { useUpdateWorkflow } from "@/features/workflows/hooks/use-workflows";
 import { useExecuteNode } from "../hooks/use-execute-node";
 
 interface TestNodeDialogProps {
@@ -63,6 +66,8 @@ export const TestNodeDialog = ({
   nodeData,
   nodeName,
 }: TestNodeDialogProps) => {
+  const editor = useAtomValue(editorAtom);
+  const updateWorkflow = useUpdateWorkflow();
   const executeNode = useExecuteNode();
   const [variableValues, setVariableValues] = useState<Record<string, string>>(
     {},
@@ -92,10 +97,31 @@ export const TestNodeDialog = ({
     }
   }, [open, variables]);
 
-  const handleRunTest = () => {
+  const handleRunTest = async () => {
     const mockContext = buildContextFromVariables(variableValues);
     setExecutionResult({ status: "running" });
     setCopied(false);
+
+    // auto-save the workflow so the DB has the latest node configs
+    if (editor) {
+      try {
+        const nodes = editor.getNodes().map((node) => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+        }));
+        const edges = editor.getEdges().map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        }));
+        await updateWorkflow.mutateAsync({ id: workflowId, nodes, edges });
+      } catch {
+        // save failed, still try to run with provided nodeData as fallback
+      }
+    }
 
     executeNode.mutate(
       { workflowId, nodeId, mockContext, nodeType, nodeData },
@@ -133,7 +159,7 @@ export const TestNodeDialog = ({
   };
 
   const isRunning =
-    executionResult.status === "running" || executeNode.isPending;
+    executionResult.status === "running" || updateWorkflow.isPending || executeNode.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
