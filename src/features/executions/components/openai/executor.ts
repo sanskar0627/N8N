@@ -1,13 +1,10 @@
-import type { NodeExecutor } from "@/features/executions/types";
-import { NonRetriableError } from "inngest";
-import { generateText } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import Handlebars from "handlebars";
-import { openAIChannel } from "@/inngest/channels/openai";
-
-Handlebars.registerHelper("json", (context) => {
-  return new Handlebars.SafeString(JSON.stringify(context));
-});
+import { generateText } from "ai";
+import { NonRetriableError } from "inngest";
+import { getGeneratedText } from "@/features/executions/lib/generated-text";
+import { nodeStepId } from "@/features/executions/lib/step-id";
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
 
 type OpenAIData = {
   variableName?: string;
@@ -22,54 +19,44 @@ export const openaiExecutor: NodeExecutor<OpenAIData> = async ({
   nodeId,
   context,
   step,
-  publish,
+  signal,
 }) => {
-  await publish(openAIChannel().status({ nodeId, status: "loading" }));
-
   if (!data.variableName) {
-    await publish(openAIChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("OpenAI Node: Variable name is required");
   }
 
   if (!data.apiKey) {
-    await publish(openAIChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("OpenAI Node: API key is required");
   }
 
   if (!data.userPrompt) {
-    await publish(openAIChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("OpenAI Node: User prompt is required");
   }
 
   const systemPrompt = data.systemPrompt
-    ? Handlebars.compile(data.systemPrompt)(context)
+    ? resolveTemplate(data.systemPrompt, context, "system prompt")
     : "You are a helpful assistant.";
-  const userPrompt = Handlebars.compile(data.userPrompt)(context);
+  const userPrompt = resolveTemplate(data.userPrompt, context, "user prompt");
 
   const openrouter = createOpenRouter({ apiKey: data.apiKey });
 
   try {
-    const { steps } = await step.ai.wrap(
-      "openai-generate-text",
+    const result = await step.ai.wrap(
+      nodeStepId("openai-generate-text", nodeId),
       generateText,
       {
         model: openrouter(data.model || "openai/gpt-4o-mini"),
         system: systemPrompt,
         prompt: userPrompt,
+        abortSignal: signal,
       },
     );
 
-    const text =
-      steps[0]?.content[0]?.type === "text" ? steps[0].content[0].text : "";
-
-    await publish(openAIChannel().status({ nodeId, status: "success" }));
-
     return {
       ...context,
-      [data.variableName]: { openAIResponse: text },
+      [data.variableName]: { openAIResponse: getGeneratedText(result) },
     };
   } catch (error) {
-    await publish(openAIChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("OpenAI Node: execution failed", {
       cause: error,
     });

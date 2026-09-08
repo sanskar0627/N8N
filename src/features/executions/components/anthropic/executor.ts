@@ -1,13 +1,10 @@
-import type { NodeExecutor } from "@/features/executions/types";
-import { NonRetriableError } from "inngest";
-import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import Handlebars from "handlebars";
-import { anthropicChannel } from "@/inngest/channels/anthropic";
-
-Handlebars.registerHelper("json", (context) => {
-  return new Handlebars.SafeString(JSON.stringify(context));
-});
+import { generateText } from "ai";
+import { NonRetriableError } from "inngest";
+import { getGeneratedText } from "@/features/executions/lib/generated-text";
+import { nodeStepId } from "@/features/executions/lib/step-id";
+import { resolveTemplate } from "@/features/executions/lib/template";
+import type { NodeExecutor } from "@/features/executions/types";
 
 type AnthropicData = {
   variableName?: string;
@@ -22,54 +19,44 @@ export const anthropicExecutor: NodeExecutor<AnthropicData> = async ({
   nodeId,
   context,
   step,
-  publish,
+  signal,
 }) => {
-  await publish(anthropicChannel().status({ nodeId, status: "loading" }));
-
   if (!data.variableName) {
-    await publish(anthropicChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Anthropic Node: Variable name is required");
   }
 
   if (!data.apiKey) {
-    await publish(anthropicChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Anthropic Node: API key is required");
   }
 
   if (!data.userPrompt) {
-    await publish(anthropicChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Anthropic Node: User prompt is required");
   }
 
   const systemPrompt = data.systemPrompt
-    ? Handlebars.compile(data.systemPrompt)(context)
+    ? resolveTemplate(data.systemPrompt, context, "system prompt")
     : "You are a helpful assistant.";
-  const userPrompt = Handlebars.compile(data.userPrompt)(context);
+  const userPrompt = resolveTemplate(data.userPrompt, context, "user prompt");
 
   const anthropic = createAnthropic({ apiKey: data.apiKey });
 
   try {
-    const { steps } = await step.ai.wrap(
-      "anthropic-generate-text",
+    const result = await step.ai.wrap(
+      nodeStepId("anthropic-generate-text", nodeId),
       generateText,
       {
         model: anthropic(data.model || "claude-sonnet-4-20250514"),
         system: systemPrompt,
         prompt: userPrompt,
+        abortSignal: signal,
       },
     );
 
-    const text =
-      steps[0]?.content[0]?.type === "text" ? steps[0].content[0].text : "";
-
-    await publish(anthropicChannel().status({ nodeId, status: "success" }));
-
     return {
       ...context,
-      [data.variableName]: { anthropicResponse: text },
+      [data.variableName]: { anthropicResponse: getGeneratedText(result) },
     };
   } catch (error) {
-    await publish(anthropicChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Anthropic Node: execution failed", {
       cause: error,
     });

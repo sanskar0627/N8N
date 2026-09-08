@@ -1,9 +1,10 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText } from "ai";
 import { NonRetriableError } from "inngest";
+import { getGeneratedText } from "@/features/executions/lib/generated-text";
+import { nodeStepId } from "@/features/executions/lib/step-id";
 import { resolveTemplate } from "@/features/executions/lib/template";
 import type { NodeExecutor } from "@/features/executions/types";
-import { geminiChannel } from "@/inngest/channels/gemini";
 
 type GeminiData = {
   variableName?: string;
@@ -18,22 +19,17 @@ export const geminiExecutor: NodeExecutor<GeminiData> = async ({
   nodeId,
   context,
   step,
-  publish,
+  signal,
 }) => {
-  await publish(geminiChannel().status({ nodeId, status: "loading" }));
-
   if (!data.variableName) {
-    await publish(geminiChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Gemini Node: Variable name is required");
   }
 
   if (!data.apiKey) {
-    await publish(geminiChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Gemini Node: API key is required");
   }
 
   if (!data.userPrompt) {
-    await publish(geminiChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Gemini Node: User prompt is required");
   }
 
@@ -44,23 +40,24 @@ export const geminiExecutor: NodeExecutor<GeminiData> = async ({
     const userPrompt = resolveTemplate(data.userPrompt, context, "user prompt");
     const google = createGoogleGenerativeAI({ apiKey: data.apiKey });
 
-    const { steps } = await step.ai.wrap("gemini-generate-text", generateText, {
-      model: google(data.model || "gemini-2.0-flash"),
-      system: systemPrompt,
-      prompt: userPrompt,
-    });
+    const result = await step.ai.wrap(
+      nodeStepId("gemini-generate-text", nodeId),
+      generateText,
+      {
+        model: google(data.model || "gemini-2.0-flash"),
+        system: systemPrompt,
+        prompt: userPrompt,
+        abortSignal: signal,
+      },
+    );
 
-    const text =
-      steps[0]?.content[0]?.type === "text" ? steps[0].content[0].text : "";
-
-    await publish(geminiChannel().status({ nodeId, status: "success" }));
+    const text = getGeneratedText(result);
 
     return {
       ...context,
       [data.variableName]: { geminiResponse: text },
     };
   } catch (error) {
-    await publish(geminiChannel().status({ nodeId, status: "error" }));
     if (error instanceof NonRetriableError) {
       throw error;
     }
