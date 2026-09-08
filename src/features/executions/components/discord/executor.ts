@@ -1,10 +1,10 @@
 import { NonRetriableError } from "inngest";
 import ky from "ky";
 import { isAllowedWebhookUrl } from "@/features/credentials/lib/webhook-url";
+import { nodeStepId } from "@/features/executions/lib/step-id";
 import { resolveTemplate } from "@/features/executions/lib/template";
 import type { NodeExecutor } from "@/features/executions/types";
 import { CredentialType } from "@/generated/prisma/enums";
-import { discordChannel } from "@/inngest/channels/discord";
 
 type DiscordData = {
   variableName?: string;
@@ -18,12 +18,9 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
   nodeId,
   context,
   step,
-  publish,
+  signal,
 }) => {
-  await publish(discordChannel().status({ nodeId, status: "loading" }));
-
   if (!data.content) {
-    await publish(discordChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Discord Node: Content is required");
   }
 
@@ -33,7 +30,7 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
       ? resolveTemplate(data.username, context, "username")
       : "M9M";
 
-    const result = await step.run("discord-webhook", async () => {
+    return await step.run(nodeStepId("discord-webhook", nodeId), async () => {
       if (!data.webhookUrl) {
         throw new NonRetriableError("Discord Node: Webhook URL is required");
       }
@@ -51,6 +48,7 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
           content: content.slice(0, 2000),
           username,
         },
+        signal,
       });
 
       return {
@@ -61,11 +59,7 @@ export const discordExecutor: NodeExecutor<DiscordData> = async ({
         },
       };
     });
-
-    await publish(discordChannel().status({ nodeId, status: "success" }));
-    return result;
   } catch (error) {
-    await publish(discordChannel().status({ nodeId, status: "error" }));
     if (error instanceof NonRetriableError) {
       throw error;
     }

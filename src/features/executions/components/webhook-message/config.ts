@@ -32,7 +32,7 @@ export const WEBHOOK_MESSAGE_CONFIG = {
     setupSteps: [
       "Create a Slack incoming webhook or a workflow that starts from a webhook",
       "Copy the HTTPS webhook URL",
-      "Save that URL as a Slack credential. Workflow webhooks should accept a content field",
+      "Save that URL as a Slack credential. Incoming webhooks use text; workflow webhooks also receive content",
     ],
   },
 } as const;

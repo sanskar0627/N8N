@@ -1,10 +1,12 @@
 import { NonRetriableError } from "inngest";
 import ky from "ky";
 import { isAllowedWebhookUrl } from "@/features/credentials/lib/webhook-url";
+import { WEBHOOK_MESSAGE_CONFIG } from "@/features/executions/components/webhook-message/config";
+import { buildSlackWebhookPayload } from "@/features/executions/lib/slack-payload";
+import { nodeStepId } from "@/features/executions/lib/step-id";
 import { resolveTemplate } from "@/features/executions/lib/template";
 import type { NodeExecutor } from "@/features/executions/types";
 import { CredentialType } from "@/generated/prisma/enums";
-import { slackChannel } from "@/inngest/channels/slack";
 
 type SlackData = {
   variableName?: string;
@@ -17,19 +19,16 @@ export const slackExecutor: NodeExecutor<SlackData> = async ({
   nodeId,
   context,
   step,
-  publish,
+  signal,
 }) => {
-  await publish(slackChannel().status({ nodeId, status: "loading" }));
-
   if (!data.content) {
-    await publish(slackChannel().status({ nodeId, status: "error" }));
     throw new NonRetriableError("Slack Node: Content is required");
   }
 
   try {
     const content = resolveTemplate(data.content, context, "message content");
 
-    const result = await step.run("slack-webhook", async () => {
+    return await step.run(nodeStepId("slack-webhook", nodeId), async () => {
       if (!data.webhookUrl) {
         throw new NonRetriableError("Slack Node: Webhook URL is required");
       }
@@ -42,23 +41,22 @@ export const slackExecutor: NodeExecutor<SlackData> = async ({
         throw new NonRetriableError("Slack Node: Variable name is required");
       }
 
+      const message = content.slice(0, WEBHOOK_MESSAGE_CONFIG.SLACK.contentMax);
+
       await ky.post(data.webhookUrl, {
-        json: { content },
+        json: buildSlackWebhookPayload(message),
+        signal,
       });
 
       return {
         ...context,
         [data.variableName]: {
-          slackMessageContent: content.slice(0, 2000),
+          slackMessageContent: message,
           slackMessageSent: true,
         },
       };
     });
-
-    await publish(slackChannel().status({ nodeId, status: "success" }));
-    return result;
   } catch (error) {
-    await publish(slackChannel().status({ nodeId, status: "error" }));
     if (error instanceof NonRetriableError) {
       throw error;
     }
