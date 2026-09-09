@@ -6,6 +6,8 @@ import { inngest } from "@/inngest/client";
 import { requireAuth } from "@/lib/auth-utils";
 import prisma from "@/lib/db";
 
+let realtimeTokenWarned = false;
+
 export type WorkflowNodeStatusToken = Realtime.Token<
   ReturnType<typeof workflowNodeStatusChannel>,
   ["status"]
@@ -13,19 +15,27 @@ export type WorkflowNodeStatusToken = Realtime.Token<
 
 export async function fetchWorkflowNodeStatusToken(
   workflowId: string,
-): Promise<WorkflowNodeStatusToken> {
-  const session = await requireAuth();
-  const workflow = await prisma.workflow.findFirst({
-    where: { id: workflowId, userId: session.user.id },
-    select: { id: true },
-  });
+): Promise<WorkflowNodeStatusToken | null> {
+  try {
+    const session = await requireAuth();
+    const workflow = await prisma.workflow.findFirst({
+      where: { id: workflowId, userId: session.user.id },
+      select: { id: true },
+    });
 
-  if (!workflow) {
-    throw new Error("Workflow not found");
+    if (!workflow) {
+      return null;
+    }
+
+    return await getSubscriptionToken(inngest, {
+      channel: workflowNodeStatusChannel(workflowId),
+      topics: ["status"],
+    });
+  } catch (error) {
+    if (!realtimeTokenWarned) {
+      console.warn("[realtime] Inngest not reachable — realtime node status disabled (this is normal if Inngest is not running)");
+      realtimeTokenWarned = true;
+    }
+    return null;
   }
-
-  return getSubscriptionToken(inngest, {
-    channel: workflowNodeStatusChannel(workflowId),
-    topics: ["status"],
-  });
 }

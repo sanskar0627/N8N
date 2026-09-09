@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAtomValue } from "jotai";
-import { toast } from "sonner";
 import {
   useSuspenseWorkflow,
   useUpdateWorkflowName,
@@ -43,17 +42,7 @@ export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
       targetHandle: edge.targetHandle,
     }));
 
-    updateWorkflow.mutate(
-      { id: workflowId, nodes, edges },
-      {
-        onSuccess: () => {
-          toast.success("Workflow saved");
-        },
-        onError: () => {
-          toast.error("Failed to save workflow");
-        },
-      }
-    );
+    updateWorkflow.mutate({ id: workflowId, nodes, edges });
   };
 
   return (

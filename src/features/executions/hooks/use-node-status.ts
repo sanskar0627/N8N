@@ -11,7 +11,7 @@ interface UseNodeStatusOptions {
   nodeId: string;
   channel: string;
   topic: string;
-  refreshToken: () => Promise<Realtime.Subscribe.Token>;
+  refreshToken: () => Promise<Realtime.Subscribe.Token | null>;
 }
 
 export function useNodeStatus({
@@ -21,10 +21,19 @@ export function useNodeStatus({
   refreshToken,
 }: UseNodeStatusOptions) {
   const [status, setStatus] = useState<NodeStatus>("initial");
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshToken().then((token) => {
+      if (!cancelled && token) setEnabled(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [refreshToken]);
 
   const { data } = useInngestSubscription({
-    refreshToken,
-    enabled: true,
+    refreshToken: refreshToken as () => Promise<Realtime.Subscribe.Token>,
+    enabled,
   });
 
   useEffect(() => {
