@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "NodeType" ADD VALUE 'DISCORD';
+ALTER TYPE "NodeType" ADD VALUE 'SLACK';
