@@ -1,163 +1,156 @@
 <p align="center">
-  <img src="public/logo/logo.png" alt="M9M Logo" width="120" />
+  <img src="public/logo/logo.png" alt="M9M" width="120">
 </p>
 
-<h1 align="center">M9M - AI Workflow Automation Platform</h1>
+<h1 align="center">M9M</h1>
 
 <p align="center">
-  Build, automate, and orchestrate AI-powered workflows with a visual editor. Connect multiple AI providers, manage credentials, and run complex multi-step automations from a single dashboard.
+  The platform for AI workflow automation. Design flows on a visual canvas, connect models and tools, keep credentials in a vault, and inspect every durable run.
 </p>
 
 <p align="center">
-  <a href="#key-features">Features</a> &nbsp;|&nbsp;
-  <a href="#tech-stack">Tech Stack</a> &nbsp;|&nbsp;
-  <a href="#getting-started">Getting Started</a> &nbsp;|&nbsp;
-  <a href="#project-structure">Project Structure</a> &nbsp;|&nbsp;
+  <a href="https://github.com/sanskar0627/N8N"><img src="https://img.shields.io/github/stars/sanskar0627/N8N?style=flat-square" alt="GitHub stars"></a>
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=nextdotjs" alt="Next.js">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT">
+</p>
+
+<p align="center">
+  <a href="#key-capabilities">Capabilities</a> ·
+  <a href="#integrations">Integrations</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#configuration">Configuration</a> ·
   <a href="#license">License</a>
 </p>
 
----
+## Key capabilities
 
-## Key Features
+- **Visual workflow builder** — Drag nodes onto a React Flow canvas, connect them, and run. Triggers and actions live on the same graph.
+- **Model flexibility** — Gemini, Anthropic Claude, and OpenAI-compatible models via OpenRouter. Switch providers without rewriting the flow.
+- **Durable execution** — Runs are queued on [Inngest](https://www.inngest.com/) with steps, retries, and a persisted execution history.
+- **Credentials vault** — API keys and Discord/Slack webhook URLs are encrypted at rest and selected per node. They are not pasted into node parameters.
+- **Observe every run** — Live node status in the editor, then a redacted output record under Executions.
+- **Safe HTTP by default** — The HTTP Request node blocks private networks, metadata hosts, hop-by-hop headers, and oversized responses.
+- **Accounts and billing** — Email/password, Google, and GitHub via Better Auth. Free plan is limited to 3 workflows; Pro is billed through Polar.
 
-- **Visual Workflow Editor** - Design multi-step AI workflows with a drag-and-drop canvas
-- **Multi-Provider AI** - Connect to Google Gemini, Anthropic Claude, and OpenRouter (Nvidia, Meta, and more) without vendor lock-in
-- **Credential Management** - Securely store and manage API keys and service credentials
-- **Premium Gating** - Built-in subscription management via Polar for free/pro tier access control
-- **Background Execution** - Reliable workflow runs powered by Inngest step functions
-- **Authentication** - Email/password, Google, and GitHub sign-in via Better Auth
-- **Error Monitoring** - Full observability with Sentry (error tracking, AI telemetry, console logging)
+## Integrations
 
-## Tech Stack
+| Category | Nodes |
+| --- | --- |
+| Triggers | Manual, Google Forms, Stripe |
+| AI | Gemini, Anthropic, OpenAI (OpenRouter) |
+| Tools | HTTP Request |
+| Messaging | Discord, Slack |
 
-| Layer | Technology |
-|---|---|
-| **Framework** | Next.js 16 (App Router, Turbopack, React Compiler) |
-| **Language** | TypeScript |
-| **API** | tRPC v11 + TanStack React Query v5 |
-| **Database** | PostgreSQL (Neon) + Prisma 7 |
-| **Auth** | Better Auth (email, Google, GitHub) |
-| **Billing** | Polar (subscription management) |
-| **Background Jobs** | Inngest v4 (step functions, AI wrapping) |
-| **AI Providers** | Google Gemini, Anthropic Claude, OpenRouter |
-| **Monitoring** | Sentry (errors, AI telemetry) |
-| **UI** | Tailwind CSS v4, shadcn/ui, Radix UI |
-| **Linting** | Biome |
+New node types register in `prisma/schema.prisma`, `src/features/executions/lib/executor-registry.ts`, and `src/config/node-components.ts`.
 
-## Getting Started
+## Quick start
 
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL database (we recommend [Neon](https://neon.tech))
-- API keys for at least one AI provider
-
-### Installation
+Requires **Node.js 20+** and a **PostgreSQL** database ([Neon](https://neon.tech) works well).
 
 ```bash
-# Clone the repository
 git clone https://github.com/sanskar0627/N8N.git
 cd N8N
-
-# Install dependencies
 npm install
+```
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your credentials (see below)
+Create a `.env` in the project root (see [Configuration](#configuration)), then:
 
-# Generate Prisma client
+```bash
 npx prisma generate
-
-# Push schema to database
 npx prisma db push
-
-# Start dev server + Inngest
 npm run dev:all
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the app and [http://localhost:8288](http://localhost:8288) for the Inngest dashboard.
+- App: [http://localhost:3000](http://localhost:3000)
+- Inngest: [http://localhost:8288](http://localhost:8288)
 
-### Environment Variables
+Sign up, create a workflow, add a trigger, and execute it.
+
+`npm run dev:all` starts Next.js and the Inngest dev server together via mprocs. You can also run them separately:
+
+```bash
+npm run dev
+npm run inngest:dev
+```
+
+## Configuration
 
 ```env
-# Database
-DATABASE_URL=your_neon_postgresql_connection_string
+# Required
+DATABASE_URL="postgresql://user:password@localhost:5432/m9m"
+BETTER_AUTH_SECRET="generate-a-long-random-string"
+BETTER_AUTH_URL="http://localhost:3000"
+ENCRYPTION_KEY="generate-another-long-random-string"
 
-# Auth
-BETTER_AUTH_SECRET=your_secret
-BETTER_AUTH_URL=http://localhost:3000
+# OAuth
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 
-# AI Providers (at least one required)
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
-OPENROUTER_API_KEY=your_openrouter_api_key
+# Billing (Polar)
+POLAR_ACCESS_TOKEN=
+POLAR_SUCCESS_URL="http://localhost:3000/workflows"
 
-# Background Jobs
+# Inngest (local)
 INNGEST_DEV=1
 
-# Monitoring
-SENTRY_AUTH_TOKEN=your_sentry_auth_token
-
-# Billing
-POLAR_ACCESS_TOKEN=your_polar_access_token
+# Monitoring (optional)
+SENTRY_AUTH_TOKEN=
 ```
 
-## Project Structure
+`ENCRYPTION_KEY` protects credentials at rest (minimum 16 characters). Changing it invalidates existing keys.
+
+AI provider keys (OpenRouter, Anthropic, Gemini) and Discord/Slack webhook URLs are stored in the in-app credentials vault, not in `.env`.
+
+## How a run works
+
+1. A trigger (manual, Google Form, or Stripe) starts an Inngest event.
+2. Nodes execute in topological order.
+3. Each node writes into a shared Handlebars context (`{{myRequest.httpResponse}}`, form fields, and so on).
+4. The final context is redacted and stored on the `Execution` record.
+
+You can also test a single action node from the editor without running the full graph.
+
+## Project structure
 
 ```
-src/
-├── app/
-│   ├── (auth)/                        # Auth pages (login, signup)
-│   ├── (dashboard)/
-│   │   ├── (editor)/                  # Workflow editor routes
-│   │   │   └── workflows/[workflowId] # Single workflow view
-│   │   └── (rest)/                    # List pages
-│   │       ├── workflows/             # Workflows list
-│   │       └── credentials/           # Credentials list
-│   └── api/
-│       ├── auth/[...all]/             # Better Auth handler
-│       ├── inngest/                   # Inngest endpoint
-│       └── trpc/[trpc]/              # tRPC handler
-├── components/
-│   ├── ui/                            # shadcn/ui primitives
-│   ├── entity-components.tsx          # Reusable list page layout
-│   └── upgrade-modal.tsx              # Pro upgrade prompt
-├── features/
-│   ├── auth/                          # Auth forms
-│   └── workflows/
-│       ├── components/                # Workflow UI components
-│       ├── hooks/                     # Client-side hooks
-│       └── server/
-│           ├── routers.ts             # tRPC CRUD routes
-│           └── prefetch.ts            # SSR data prefetching
-├── hooks/
-│   └── use-upgrade-modal.tsx          # Premium gating hook
-├── inngest/
-│   ├── client.ts                      # Inngest client
-│   └── functions.ts                   # AI execution functions
-├── lib/
-│   ├── db.ts                          # Prisma client
-│   ├── auth.ts                        # Auth server config
-│   └── auth-client.ts                 # Auth client + Polar
-└── trpc/
-    ├── init.ts                        # tRPC init + middleware
-    ├── client.tsx                      # Client provider
-    ├── server.tsx                      # SSR prefetch helpers
-    └── routers/_app.ts                # Root router
+prisma/                 Schema and migrations
+public/                 Brand and integration logos
+src/app/                App Router pages, auth, Inngest, tRPC, webhooks
+src/components/         Shared UI, sidebar, React Flow primitives
+src/features/
+  auth/                 Login and signup
+  credentials/          Encrypted credential vault
+  editor/               Canvas, header, execute / test
+  executions/           Node executors, HTTP guard, run history
+  triggers/             Manual, Google Forms, Stripe
+  subscriptions/        Polar billing
+  workflows/            Workflow CRUD
+src/inngest/            Durable functions and realtime channels
+src/lib/                Auth, database, Polar, encryption
+src/trpc/               App router and React Query client
 ```
 
 ## Scripts
 
-```bash
-npm run dev          # Start Next.js dev server (Turbopack)
-npm run build        # Production build
-npm run start        # Start production server
-npm run dev:all      # Dev server + Inngest (via mprocs)
-npm run lint         # Lint with Biome
-npm run format       # Format with Biome
-npm run inngest:dev  # Inngest dev server only
-```
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Next.js (Turbopack) |
+| `npm run inngest:dev` | Local Inngest + realtime |
+| `npm run dev:all` | App + Inngest via mprocs |
+| `npm run build` / `npm start` | Production |
+| `npm run lint` / `npm run format` | Biome |
+| `npm test` | Node test runner |
+
+## Contributing
+
+Bug reports and pull requests are welcome on [GitHub](https://github.com/sanskar0627/N8N).
+
+1. Fork the repo and create a branch.
+2. Keep the change scoped to one node, route, or feature.
+3. Run `npm run lint` and `npm test` before opening the PR.
 
 ## License
 

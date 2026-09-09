@@ -5,22 +5,22 @@ import { MousePointerIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { memo, useCallback, useState } from "react";
 import { useNodeStatus } from "@/features/executions/hooks/use-node-status";
-import { manualTriggerChannelName } from "@/inngest/channels/manual-trigger";
+import { fetchWorkflowNodeStatusToken } from "@/features/executions/lib/realtime-token";
+import { workflowNodeStatusChannelName } from "@/inngest/channels/workflow-node-status";
 import { BaseTriggerNode } from "../base-trigger-node";
-import { fetchManualTriggerRealtimeToken } from "./actions";
 import { ManualTriggerDialog } from "./dialog";
 
 export const ManualTriggerNode = memo((props: NodeProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { workflowId } = useParams<{ workflowId: string }>();
   const refreshToken = useCallback(
-    () => fetchManualTriggerRealtimeToken(workflowId),
+    () => fetchWorkflowNodeStatusToken(workflowId),
     [workflowId],
   );
 
   const nodeStatus = useNodeStatus({
     nodeId: props.id,
-    channel: manualTriggerChannelName(workflowId),
+    channel: workflowNodeStatusChannelName(workflowId),
     topic: "status",
     refreshToken,
   });

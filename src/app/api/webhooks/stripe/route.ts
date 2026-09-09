@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { readNodeSecretSafe } from "@/features/credentials/lib/node-secret";
 import { stripeEventTypesSchema } from "@/features/triggers/components/stripe-trigger/schema";
 import {
   buildStripeInitialData,
@@ -48,17 +49,17 @@ export async function POST(request: NextRequest) {
   });
 
   if (!node) {
-    return errorResponse("Stripe Trigger not found", 404);
+    return errorResponse("Invalid Stripe signature", 400);
   }
 
   const nodeData =
     node.data && typeof node.data === "object" && !Array.isArray(node.data)
       ? (node.data as Record<string, unknown>)
       : {};
-  const webhookSecret = nodeData.webhookSecret;
+  const webhookSecret = readNodeSecretSafe(nodeData.webhookSecret);
 
-  if (typeof webhookSecret !== "string") {
-    return errorResponse("Stripe webhook is not configured", 409);
+  if (!webhookSecret) {
+    return errorResponse("Invalid Stripe signature", 400);
   }
 
   let rawBody: string;

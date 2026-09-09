@@ -4,9 +4,9 @@ import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { useParams } from "next/navigation";
 import { memo, useCallback, useState } from "react";
 import { useNodeStatus } from "@/features/executions/hooks/use-node-status";
-import { stripeTriggerChannelName } from "@/inngest/channels/stripe-trigger";
+import { fetchWorkflowNodeStatusToken } from "@/features/executions/lib/realtime-token";
+import { workflowNodeStatusChannelName } from "@/inngest/channels/workflow-node-status";
 import { BaseTriggerNode } from "../base-trigger-node";
-import { fetchStripeTriggerRealtimeToken } from "./actions";
 import { StripeTriggerDialog } from "./dialog";
 
 type StripeTriggerNodeData = {
@@ -21,12 +21,12 @@ export const StripeTriggerNode = memo(
     const { workflowId } = useParams<{ workflowId: string }>();
     const { setNodes } = useReactFlow();
     const refreshToken = useCallback(
-      () => fetchStripeTriggerRealtimeToken(workflowId),
+      () => fetchWorkflowNodeStatusToken(workflowId),
       [workflowId],
     );
     const nodeStatus = useNodeStatus({
       nodeId: props.id,
-      channel: stripeTriggerChannelName(workflowId),
+      channel: workflowNodeStatusChannelName(workflowId),
       topic: "status",
       refreshToken,
     });

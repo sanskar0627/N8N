@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { readNodeSecretSafe } from "@/features/credentials/lib/node-secret";
 import { googleFormWebhookPayloadSchema } from "@/features/triggers/components/google-form-trigger/schema";
 import {
   buildGoogleFormInitialData,
@@ -40,19 +41,16 @@ export async function POST(request: NextRequest) {
     select: { data: true },
   });
 
-  if (!node) {
-    return errorResponse("Google Form Trigger not found", 404);
-  }
-
   const nodeData =
-    node.data && typeof node.data === "object" && !Array.isArray(node.data)
+    node?.data && typeof node.data === "object" && !Array.isArray(node.data)
       ? (node.data as Record<string, unknown>)
       : {};
-  const expectedSecret = nodeData.secret;
-  const providedSecret = request.headers.get("x-secret");
+  const expectedSecret = readNodeSecretSafe(nodeData.secret);
+  const providedSecret = request.headers.get("x-secret") ?? "";
 
   if (
-    typeof expectedSecret !== "string" ||
+    !node ||
+    !expectedSecret ||
     !providedSecret ||
     !safeCompareSecrets(providedSecret, expectedSecret)
   ) {

@@ -14,6 +14,7 @@ import {
   WEBHOOK_MESSAGE_NODE_TYPES,
 } from "../src/features/executions/components/webhook-message/config";
 import { webhookMessageFormSchema } from "../src/features/executions/components/webhook-message/schema";
+import { buildSlackWebhookPayload } from "../src/features/executions/lib/slack-payload";
 import { CredentialType, NodeType } from "../src/generated/prisma/enums";
 
 test("maps Discord and Slack nodes to webhook credentials", () => {
@@ -154,6 +155,13 @@ test("hydrates webhook URLs from saved credentials", async () => {
     hydrated.webhookUrl,
     "https://hooks.slack.com/services/T1/B1/abc",
   );
+});
+
+test("sends Slack text for incoming webhooks and content for workflow webhooks", () => {
+  assert.deepEqual(buildSlackWebhookPayload("Deployed"), {
+    text: "Deployed",
+    content: "Deployed",
+  });
 });
 
 test("rejects an unsafe webhook credential during hydration", async () => {

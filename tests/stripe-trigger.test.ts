@@ -11,7 +11,7 @@ import {
   getStripeEventId,
   shouldProcessStripeEvent,
 } from "../src/features/triggers/components/stripe-trigger/utils";
-import { stripeTriggerChannelName } from "../src/inngest/channels/stripe-trigger";
+import { workflowNodeStatusChannelName } from "../src/inngest/channels/workflow-node-status";
 
 const stripe = new Stripe("sk_test_m9m_tests");
 
@@ -113,7 +113,7 @@ test("scopes event ids and realtime channels", () => {
     getStripeEventId("workflow-1", "node-2", "event-1"),
   );
   assert.equal(
-    stripeTriggerChannelName("workflow-1"),
-    "workflow:workflow-1:stripe-trigger-execution",
+    workflowNodeStatusChannelName("workflow-1"),
+    "workflow:workflow-1:node-status",
   );
 });

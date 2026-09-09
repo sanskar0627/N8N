@@ -1,21 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getLatestNodeStatus } from "../src/features/executions/lib/realtime-status";
-import { httpRequestChannelName } from "../src/inngest/channels/http-request";
-import { manualTriggerChannelName } from "../src/inngest/channels/manual-trigger";
+import { workflowNodeStatusChannelName } from "../src/inngest/channels/workflow-node-status";
 
 test("scopes realtime channels to a workflow", () => {
   assert.equal(
-    httpRequestChannelName("workflow-a"),
-    "workflow:workflow-a:http-request-execution",
+    workflowNodeStatusChannelName("workflow-a"),
+    "workflow:workflow-a:node-status",
   );
   assert.equal(
-    manualTriggerChannelName("workflow-b"),
-    "workflow:workflow-b:manual-trigger-execution",
+    workflowNodeStatusChannelName("workflow-b"),
+    "workflow:workflow-b:node-status",
   );
   assert.notEqual(
-    httpRequestChannelName("workflow-a"),
-    httpRequestChannelName("workflow-b"),
+    workflowNodeStatusChannelName("workflow-a"),
+    workflowNodeStatusChannelName("workflow-b"),
   );
 });
 
@@ -23,21 +22,21 @@ test("selects the latest matching node status", () => {
   const messages = [
     {
       kind: "data",
-      channel: "workflow:one:http-request-execution",
+      channel: "workflow:one:node-status",
       topic: "status",
       createdAt: new Date("2026-08-29T10:00:00Z"),
       data: { nodeId: "node-one", status: "loading" },
     },
     {
       kind: "data",
-      channel: "workflow:one:http-request-execution",
+      channel: "workflow:one:node-status",
       topic: "status",
       createdAt: new Date("2026-08-29T10:00:02Z"),
       data: { nodeId: "node-one", status: "success" },
     },
     {
       kind: "data",
-      channel: "workflow:one:http-request-execution",
+      channel: "workflow:one:node-status",
       topic: "status",
       createdAt: new Date("2026-08-29T10:00:03Z"),
       data: { nodeId: "another-node", status: "error" },
@@ -47,10 +46,45 @@ test("selects the latest matching node status", () => {
   assert.equal(
     getLatestNodeStatus(messages, {
       nodeId: "node-one",
-      channel: "workflow:one:http-request-execution",
+      channel: "workflow:one:node-status",
       topic: "status",
     }),
     "success",
+  );
+});
+
+test("ignores statuses from an older overlapping execution", () => {
+  const messages = [
+    {
+      kind: "data",
+      channel: "workflow:one:node-status",
+      topic: "status",
+      createdAt: new Date("2026-08-29T10:00:00Z"),
+      data: { nodeId: "node-one", status: "success", executionId: "run-a" },
+    },
+    {
+      kind: "data",
+      channel: "workflow:one:node-status",
+      topic: "status",
+      createdAt: new Date("2026-08-29T10:00:05Z"),
+      data: { nodeId: "node-one", status: "loading", executionId: "run-b" },
+    },
+    {
+      kind: "data",
+      channel: "workflow:one:node-status",
+      topic: "status",
+      createdAt: new Date("2026-08-29T10:00:06Z"),
+      data: { nodeId: "node-one", status: "success", executionId: "run-a" },
+    },
+  ];
+
+  assert.equal(
+    getLatestNodeStatus(messages, {
+      nodeId: "node-one",
+      channel: "workflow:one:node-status",
+      topic: "status",
+    }),
+    "loading",
   );
 });
 
@@ -62,7 +96,7 @@ test("ignores malformed and unrelated realtime messages", () => {
         { kind: "ping" },
         {
           kind: "data",
-          channel: "workflow:two:http-request-execution",
+          channel: "workflow:two:node-status",
           topic: "status",
           createdAt: new Date(),
           data: { nodeId: "node-one", status: "unknown" },
@@ -70,7 +104,7 @@ test("ignores malformed and unrelated realtime messages", () => {
       ],
       {
         nodeId: "node-one",
-        channel: "workflow:one:http-request-execution",
+        channel: "workflow:one:node-status",
         topic: "status",
       },
     ),

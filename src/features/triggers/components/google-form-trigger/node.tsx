@@ -4,21 +4,21 @@ import type { NodeProps } from "@xyflow/react";
 import { useParams } from "next/navigation";
 import { memo, useCallback, useState } from "react";
 import { useNodeStatus } from "@/features/executions/hooks/use-node-status";
-import { googleFormTriggerChannelName } from "@/inngest/channels/google-form-trigger";
+import { fetchWorkflowNodeStatusToken } from "@/features/executions/lib/realtime-token";
+import { workflowNodeStatusChannelName } from "@/inngest/channels/workflow-node-status";
 import { BaseTriggerNode } from "../base-trigger-node";
-import { fetchGoogleFormTriggerRealtimeToken } from "./actions";
 import { GoogleFormTriggerDialog } from "./dialog";
 
 export const GoogleFormTriggerNode = memo((props: NodeProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { workflowId } = useParams<{ workflowId: string }>();
   const refreshToken = useCallback(
-    () => fetchGoogleFormTriggerRealtimeToken(workflowId),
+    () => fetchWorkflowNodeStatusToken(workflowId),
     [workflowId],
   );
   const nodeStatus = useNodeStatus({
     nodeId: props.id,
-    channel: googleFormTriggerChannelName(workflowId),
+    channel: workflowNodeStatusChannelName(workflowId),
     topic: "status",
     refreshToken,
   });

@@ -8,7 +8,7 @@ import {
   getGoogleFormEventId,
   safeCompareSecrets,
 } from "../src/features/triggers/components/google-form-trigger/utils";
-import { googleFormTriggerChannelName } from "../src/inngest/channels/google-form-trigger";
+import { workflowNodeStatusChannelName } from "../src/inngest/channels/workflow-node-status";
 
 const validPayload = {
   formId: "form-123",
@@ -90,7 +90,7 @@ test("supports question titles and workflow-scoped realtime", () => {
     "Ada",
   );
   assert.equal(
-    googleFormTriggerChannelName("workflow-1"),
-    "workflow:workflow-1:google-form-trigger-execution",
+    workflowNodeStatusChannelName("workflow-1"),
+    "workflow:workflow-1:node-status",
   );
 });

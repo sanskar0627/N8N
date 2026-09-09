@@ -52,6 +52,27 @@ test("redacts secrets from execution output", () => {
   );
 });
 
+test("redacts access_token-style keys from node test output", () => {
+  assert.deepEqual(
+    redactExecutionOutput({
+      http: {
+        httpResponse: {
+          data: { access_token: "leak", summary: "ok" },
+        },
+        apiKey: "sk-live",
+      },
+    }),
+    {
+      http: {
+        httpResponse: {
+          data: { access_token: "[redacted]", summary: "ok" },
+        },
+        apiKey: "[redacted]",
+      },
+    },
+  );
+});
+
 test("ignores prototype pollution keys while redacting output", () => {
   const output = redactExecutionOutput({
     safe: true,

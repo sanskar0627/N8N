@@ -5,6 +5,11 @@ import {
   storeCredentialValue,
 } from "../src/features/credentials/lib/credential-value";
 import {
+  persistNodeSecret,
+  readNodeSecret,
+  readNodeSecretSafe,
+} from "../src/features/credentials/lib/node-secret";
+import {
   decrypt,
   encrypt,
   isEncryptedCredentialValue,
@@ -69,6 +74,19 @@ test("fails closed when the encryption key is missing", () => {
       process.env.ENCRYPTION_KEY = previousKey;
     }
   }
+});
+
+test("encrypts node-stored webhook secrets and decrypts them for use", async () => {
+  await withEncryptionKey("m9m-test-encryption-key", () => {
+    const stored = persistNodeSecret("whsec_plain");
+
+    assert.equal(isEncryptedCredentialValue(stored), true);
+    assert.equal(persistNodeSecret(stored), stored);
+    assert.equal(readNodeSecret(stored), "whsec_plain");
+    assert.equal(readNodeSecretSafe(stored), "whsec_plain");
+    assert.equal(readNodeSecretSafe("not-encrypted"), "not-encrypted");
+    assert.equal(readNodeSecretSafe(undefined), "");
+  });
 });
 
 test("rejects ciphertext produced with a different key", async () => {
