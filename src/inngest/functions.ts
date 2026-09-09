@@ -1,6 +1,7 @@
 import { NonRetriableError } from "inngest";
 import { hydrateNodeData } from "@/features/credentials/lib/hydrate-ai-node-data";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
+import { redactExecutionOutput } from "@/features/executions/lib/redact-execution-output";
 import { ExecutionStatus, type NodeType } from "@/generated/prisma/enums";
 import prisma from "@/lib/db";
 import { workflowNodeStatusChannel } from "./channels/workflow-node-status";
@@ -16,6 +17,7 @@ export const executeWorkflow = inngest.createFunction(
         where: { inngestEventId: event.data.event.id },
         data: {
           status: ExecutionStatus.FAILED,
+          completedAt: new Date(),
           error: event.data.error.message,
           errorStack: event.data.error.stack,
         },
@@ -41,26 +43,21 @@ export const executeWorkflow = inngest.createFunction(
       });
     });
 
-    const { sortedNodes } = await step.run("prepare-workflow", async () => {
-      const workflow = await prisma.workflow.findUniqueOrThrow({
-        where: { id: workflowId },
-        include: {
-          nodes: true,
-          connection: true,
-        },
-      });
+    const { sortedNodes, userId } = await step.run(
+      "prepare-workflow",
+      async () => {
+        const workflow = await prisma.workflow.findUniqueOrThrow({
+          where: { id: workflowId },
+          include: {
+            nodes: true,
+            connection: true,
+          },
+        });
 
-      const sorted = topologicalSort(workflow.nodes, workflow.connection);
-      return { sortedNodes: sorted };
-    });
-
-    const userId = await step.run("find-user-id", async () => {
-      const workflow = await prisma.workflow.findUniqueOrThrow({
-        where: { id: workflowId },
-        select: { userId: true },
-      });
-      return workflow.userId;
-    });
+        const sorted = topologicalSort(workflow.nodes, workflow.connection);
+        return { sortedNodes: sorted, userId: workflow.userId };
+      },
+    );
 
     let context = event.data.initialData || {};
 
@@ -75,9 +72,11 @@ export const executeWorkflow = inngest.createFunction(
         workflowNodeStatusChannel(workflowId).status({
           nodeId: node.id,
           status: "loading",
+          executionId: inngestEventId,
         }),
       );
 
+      const controller = new AbortController();
       const executePromise = executor({
         data: nodeData,
         nodeId: node.id,
@@ -85,13 +84,19 @@ export const executeWorkflow = inngest.createFunction(
         userId,
         context,
         step,
-        publish,
+        signal: controller.signal,
+        executionId: inngestEventId,
       });
 
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error("Timeout: Execution took longer than 60 seconds"));
+          controller.abort();
+          reject(
+            new NonRetriableError(
+              "Timeout: Execution took longer than 60 seconds",
+            ),
+          );
         }, 60000);
       });
 
@@ -101,6 +106,7 @@ export const executeWorkflow = inngest.createFunction(
           workflowNodeStatusChannel(workflowId).status({
             nodeId: node.id,
             status: "success",
+            executionId: inngestEventId,
           }),
         );
       } catch (error) {
@@ -108,8 +114,24 @@ export const executeWorkflow = inngest.createFunction(
           workflowNodeStatusChannel(workflowId).status({
             nodeId: node.id,
             status: "error",
+            executionId: inngestEventId,
           }),
         );
+        try {
+          await step.run(`persist-partial-output:${node.id}`, async () => {
+            await prisma.execution.update({
+              where: {
+                inngestEventId,
+                workflowId,
+              },
+              data: {
+                output: redactExecutionOutput(context) as typeof context,
+              },
+            });
+          });
+        } catch {
+          // Keep the original node error if the checkpoint write fails.
+        }
         throw error;
       } finally {
         if (timeoutId) {
@@ -127,7 +149,7 @@ export const executeWorkflow = inngest.createFunction(
         data: {
           status: ExecutionStatus.SUCCESS,
           completedAt: new Date(),
-          output: context,
+          output: redactExecutionOutput(context) as typeof context,
         },
       });
     });

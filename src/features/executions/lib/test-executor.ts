@@ -41,10 +41,6 @@ function createMockStep() {
   };
 }
 
-function createMockPublish() {
-  return async () => {};
-}
-
 interface TestNodeParams {
   workflowId: string;
   nodeId: string;
@@ -91,9 +87,6 @@ export async function executeNodeForTest(
     const step = createMockStep() as unknown as Parameters<
       typeof executor
     >[0]["step"];
-    const publish = createMockPublish() as unknown as Parameters<
-      typeof executor
-    >[0]["publish"];
     const data =
       node.data && typeof node.data === "object" && !Array.isArray(node.data)
         ? (node.data as Record<string, unknown>)
@@ -111,7 +104,6 @@ export async function executeNodeForTest(
       userId,
       context: mockContext,
       step,
-      publish,
     });
 
     return { success: true, output: result };

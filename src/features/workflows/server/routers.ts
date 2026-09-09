@@ -5,13 +5,13 @@ import { generateSlug } from "random-word-slugs";
 import { z } from "zod";
 import { FREE_WORKFLOW_LIMIT, PAGINATION } from "@/config/constants";
 import {
-  getPolarCustomerState,
-  hasActivePolarSubscription,
-} from "@/lib/polar-customer";
-import {
   collectAiCredentialRefs,
   findInvalidAiCredentialRef,
 } from "@/features/credentials/lib/ai-credentials";
+import {
+  persistNodeSecret,
+  readNodeSecret,
+} from "@/features/credentials/lib/node-secret";
 import {
   AI_NODE_TYPES,
   isAiNodeType,
@@ -20,6 +20,7 @@ import {
   isWebhookMessageNodeType,
   WEBHOOK_MESSAGE_NODE_TYPES,
 } from "@/features/executions/components/webhook-message/config";
+import { redactExecutionOutput } from "@/features/executions/lib/redact-execution-output";
 import { executeNodeForTest } from "@/features/executions/lib/test-executor";
 import {
   findDuplicateVariableNames,
@@ -32,6 +33,10 @@ import {
 import { NodeType } from "@/generated/prisma/enums";
 import { sendWorkflowExecution } from "@/inngest/utils";
 import prisma from "@/lib/db";
+import {
+  getPolarCustomerState,
+  hasActivePolarSubscription,
+} from "@/lib/polar-customer";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 
 export const workflowsRouter = createTRPCRouter({
@@ -256,7 +261,7 @@ export const workflowsRouter = createTRPCRouter({
               delete data.secret;
               const existingSecret = googleFormSecrets.get(node.id);
               if (existingSecret) {
-                data.secret = existingSecret;
+                data.secret = persistNodeSecret(existingSecret);
               }
             }
 
@@ -264,7 +269,7 @@ export const workflowsRouter = createTRPCRouter({
               delete data.webhookSecret;
               const existingSecret = stripeWebhookSecrets.get(node.id);
               if (existingSecret) {
-                data.webhookSecret = existingSecret;
+                data.webhookSecret = persistNodeSecret(existingSecret);
               }
             }
 
@@ -275,7 +280,7 @@ export const workflowsRouter = createTRPCRouter({
                 data.credentialId.length > 0;
               const existingApiKey = aiApiKeys.get(node.id);
               if (!hasCredential && existingApiKey) {
-                data.apiKey = existingApiKey;
+                data.apiKey = persistNodeSecret(existingApiKey);
               }
             }
 
@@ -289,7 +294,7 @@ export const workflowsRouter = createTRPCRouter({
                 data.credentialId.length > 0;
               const existingWebhookUrl = webhookUrls.get(node.id);
               if (!hasCredential && existingWebhookUrl) {
-                data.webhookUrl = existingWebhookUrl;
+                data.webhookUrl = persistNodeSecret(existingWebhookUrl);
               }
             }
 
@@ -356,14 +361,15 @@ export const workflowsRouter = createTRPCRouter({
       const existingSecret = nodeData.secret;
 
       if (typeof existingSecret === "string" && !input.rotate) {
-        return { secret: existingSecret };
+        return { secret: readNodeSecret(existingSecret) };
       }
 
       const secret = randomUUID();
+      const storedSecret = persistNodeSecret(secret);
       if (input.rotate) {
         await prisma.node.update({
           where: { id: node.id },
-          data: { data: { ...nodeData, secret } },
+          data: { data: { ...nodeData, secret: storedSecret } },
         });
         return { secret };
       }
@@ -373,7 +379,7 @@ export const workflowsRouter = createTRPCRouter({
         SET "data" = jsonb_set(
           COALESCE("data", '{}'::jsonb),
           '{secret}',
-          ${JSON.stringify(secret)}::jsonb
+          ${JSON.stringify(storedSecret)}::jsonb
         )
         WHERE "id" = ${node.id}
           AND (
@@ -400,7 +406,7 @@ export const workflowsRouter = createTRPCRouter({
         });
       }
 
-      return { secret: updatedData.secret };
+      return { secret: readNodeSecret(updatedData.secret) };
     }),
   getStripeWebhookConfig: protectedProcedure
     .input(z.object({ workflowId: z.string(), nodeId: z.string() }))
@@ -477,7 +483,7 @@ export const workflowsRouter = createTRPCRouter({
         data: {
           data: {
             ...data,
-            webhookSecret,
+            webhookSecret: persistNodeSecret(webhookSecret),
             allowedEventTypes: input.allowedEventTypes,
           },
         },
@@ -668,7 +674,7 @@ export const workflowsRouter = createTRPCRouter({
       return {
         success: true,
         nodeId: input.nodeId,
-        output: result.output,
+        output: redactExecutionOutput(result.output),
       };
     }),
 });

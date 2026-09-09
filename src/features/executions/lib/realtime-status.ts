@@ -22,10 +22,78 @@ const parseTimestamp = (value: unknown) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+const getActiveExecutionId = (
+  messages: Array<{
+    executionId: string;
+    timestamp: number;
+  }>,
+) => {
+  const firstSeen = new Map<string, number>();
+  for (const message of messages) {
+    const seen = firstSeen.get(message.executionId);
+    if (seen === undefined || message.timestamp < seen) {
+      firstSeen.set(message.executionId, message.timestamp);
+    }
+  }
+
+  let activeId = "";
+  let startedAt = -1;
+  for (const [executionId, timestamp] of firstSeen) {
+    if (timestamp >= startedAt) {
+      startedAt = timestamp;
+      activeId = executionId;
+    }
+  }
+
+  return activeId;
+};
+
 export const getLatestNodeStatus = (
   messages: readonly unknown[],
   options: { nodeId: string; channel: string; topic: string },
 ): NodeStatus | undefined => {
+  const matching: Array<{
+    status: NodeStatus;
+    timestamp: number;
+    executionId: string;
+  }> = [];
+
+  for (const value of messages) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+
+    const message = value as RealtimeMessage;
+    if (
+      message.kind !== "data" ||
+      message.channel !== options.channel ||
+      message.topic !== options.topic ||
+      !message.data ||
+      typeof message.data !== "object"
+    ) {
+      continue;
+    }
+
+    const data = message.data as Record<string, unknown>;
+    if (
+      typeof data.status !== "string" ||
+      !NODE_STATUSES.has(data.status as NodeStatus)
+    ) {
+      continue;
+    }
+
+    matching.push({
+      status: data.status as NodeStatus,
+      timestamp: parseTimestamp(message.createdAt),
+      executionId: typeof data.executionId === "string" ? data.executionId : "",
+    });
+  }
+
+  if (matching.length === 0) {
+    return undefined;
+  }
+
+  const activeExecutionId = getActiveExecutionId(matching);
   let latestStatus: NodeStatus | undefined;
   let latestTimestamp = -1;
 
@@ -46,7 +114,10 @@ export const getLatestNodeStatus = (
     }
 
     const data = message.data as Record<string, unknown>;
+    const executionId =
+      typeof data.executionId === "string" ? data.executionId : "";
     if (
+      executionId !== activeExecutionId ||
       data.nodeId !== options.nodeId ||
       typeof data.status !== "string" ||
       !NODE_STATUSES.has(data.status as NodeStatus)

@@ -4,10 +4,10 @@ import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { GlobeIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { memo, useCallback, useState } from "react";
-import { httpRequestChannelName } from "@/inngest/channels/http-request";
+import { fetchWorkflowNodeStatusToken } from "@/features/executions/lib/realtime-token";
+import { workflowNodeStatusChannelName } from "@/inngest/channels/workflow-node-status";
 import { useNodeStatus } from "../../hooks/use-node-status";
 import { BaseExecutionNode } from "../base-execution-node";
-import { fetchHttpRequestRealtimeToken } from "./actions";
 import { HttpRequestDialog, type HttpRequestFormValues } from "./dialog";
 
 type HttpRequestNodeData = {
@@ -25,13 +25,13 @@ export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
   const { setNodes } = useReactFlow();
   const { workflowId } = useParams<{ workflowId: string }>();
   const refreshToken = useCallback(
-    () => fetchHttpRequestRealtimeToken(workflowId),
+    () => fetchWorkflowNodeStatusToken(workflowId),
     [workflowId],
   );
 
   const nodeStatus = useNodeStatus({
     nodeId: props.id,
-    channel: httpRequestChannelName(workflowId),
+    channel: workflowNodeStatusChannelName(workflowId),
     topic: "status",
     refreshToken,
   });
