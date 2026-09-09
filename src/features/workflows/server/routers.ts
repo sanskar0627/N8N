@@ -32,6 +32,7 @@ import {
 } from "@/features/triggers/components/stripe-trigger/schema";
 import { NodeType } from "@/generated/prisma/enums";
 import { sendWorkflowExecution } from "@/inngest/utils";
+import { executeWorkflowDirect } from "@/features/executions/lib/direct-executor";
 import prisma from "@/lib/db";
 import {
   getPolarCustomerState,
@@ -170,22 +171,39 @@ export const workflowsRouter = createTRPCRouter({
         }
       }
 
+      // Validate node types before saving
+      const validNodeTypes = new Set(Object.values(NodeType));
+      for (const node of nodes) {
+        if (!node.type || !validNodeTypes.has(node.type as NodeType)) {
+          console.error("[workflows.update] Invalid node type:", {
+            nodeId: node.id,
+            type: node.type,
+            validTypes: [...validNodeTypes],
+          });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Invalid node type "${node.type}" for node ${node.id}`,
+          });
+        }
+      }
+
       // Transaction to ensure consistency
+      try {
       return await prisma.$transaction(async (tx) => {
-        const existingPrivateNodes = await tx.node.findMany({
-          where: {
-            workflowId: id,
-            type: {
-              in: [
-                NodeType.GOOGLE_FORM_TRIGGER,
-                NodeType.STRIPE_TRIGGER,
-                ...AI_NODE_TYPES,
-                ...WEBHOOK_MESSAGE_NODE_TYPES,
-              ],
-            },
-          },
-          select: { id: true, data: true },
+        // Fetch all nodes and filter in JS to avoid enum mismatch if DB is behind schema
+        const allExistingNodes = await tx.node.findMany({
+          where: { workflowId: id },
+          select: { id: true, type: true, data: true },
         });
+        const privateNodeTypes = new Set([
+          NodeType.GOOGLE_FORM_TRIGGER,
+          NodeType.STRIPE_TRIGGER,
+          ...AI_NODE_TYPES,
+          ...WEBHOOK_MESSAGE_NODE_TYPES,
+        ]);
+        const existingPrivateNodes = allExistingNodes.filter(
+          (node: { type: string }) => privateNodeTypes.has(node.type as NodeType),
+        );
         const googleFormSecrets = new Map(
           existingPrivateNodes.flatMap(
             (node: { id: string; data: unknown }) => {
@@ -298,27 +316,39 @@ export const workflowsRouter = createTRPCRouter({
               }
             }
 
+            // Ensure data is a clean JSON-serializable object
+            const sanitizedData = JSON.parse(JSON.stringify(data || {}));
+
             return {
               id: node.id,
               workflowId: id,
               name: node.type || "unknown",
               type: node.type as NodeType,
-              position: node.position,
-              data,
+              position: { x: node.position.x, y: node.position.y },
+              data: sanitizedData,
             };
           }),
         });
 
-        // Create connections
-        await tx.connection.createMany({
-          data: edges.map((edge) => ({
-            workflowId: id,
-            fromNodeId: edge.source,
-            toNodeId: edge.target,
-            fromOutput: edge.sourceHandle || "main",
-            toInput: edge.targetHandle || "main",
-          })),
+        // Create connections (deduplicate to avoid unique constraint violation)
+        const edgeKeys = new Set<string>();
+        const uniqueEdges = edges.filter((edge) => {
+          const key = `${edge.source}:${edge.sourceHandle || "main"}:${edge.target}:${edge.targetHandle || "main"}`;
+          if (edgeKeys.has(key)) return false;
+          edgeKeys.add(key);
+          return true;
         });
+        if (uniqueEdges.length > 0) {
+          await tx.connection.createMany({
+            data: uniqueEdges.map((edge) => ({
+              workflowId: id,
+              fromNodeId: edge.source,
+              toNodeId: edge.target,
+              fromOutput: edge.sourceHandle || "main",
+              toInput: edge.targetHandle || "main",
+            })),
+          });
+        }
 
         // Update workflow's updatedAt timestamp
         await tx.workflow.update({
@@ -328,6 +358,13 @@ export const workflowsRouter = createTRPCRouter({
 
         return workflow;
       });
+      } catch (error) {
+        console.error("[workflows.update] Failed to save workflow:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "Failed to save workflow",
+        });
+      }
     }),
   generateGoogleFormSecret: protectedProcedure
     .input(
@@ -501,7 +538,21 @@ export const workflowsRouter = createTRPCRouter({
         where: { id: input.id, userId: ctx.auth.user.id },
       });
 
-      await sendWorkflowExecution({ workflowId: input.id });
+      // Try Inngest first, fall back to direct execution
+      try {
+        await sendWorkflowExecution({ workflowId: input.id });
+      } catch (inngestError) {
+        console.warn("[workflows.execute] Inngest unavailable, running directly:", inngestError instanceof Error ? inngestError.message : inngestError);
+        try {
+          await executeWorkflowDirect(input.id);
+        } catch (execError) {
+          console.error("[workflows.execute] Direct execution failed:", execError);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: execError instanceof Error ? execError.message : "Failed to execute workflow",
+          });
+        }
+      }
 
       return workflow;
     }),
